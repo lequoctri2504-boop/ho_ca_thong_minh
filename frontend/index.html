@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AquaAI Dashboard - Quản trị Hồ Cá Thông Minh</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="dashboard-wrapper">
+        <aside class="sidebar glass-panel">
+            <div class="logo"><i class="fa-solid fa-water"></i> Aqua<span>AI</span></div>
+            <nav>
+                <button class="nav-btn active" data-tab="tab-overview"><i class="fa-solid fa-chart-line"></i> Tổng quan IoT</button>
+                <button class="nav-btn" data-tab="tab-ai"><i class="fa-solid fa-fish"></i> Tư vấn cá phù hợp</button>
+                <button class="nav-btn" data-tab="tab-fish"><i class="fa-solid fa-water-ladder"></i> Quản lý Đàn cá</button>
+                <button class="nav-btn" data-tab="tab-control"><i class="fa-solid fa-sliders"></i> Điều khiển Thiết bị</button>
+                <button class="nav-btn" data-tab="tab-history"><i class="fa-solid fa-clock-rotate-left"></i> Lịch sử Hệ thống</button>
+            </nav>
+        </aside>
+
+        <main class="content-area">
+            <!-- TAB 1: TỔNG QUAN -->
+            <section id="tab-overview" class="tab-pane active">
+                <div class="header-title">
+                    <h2>Giám sát Sinh thái Thời gian thực</h2>
+                    <p>Dữ liệu cập nhật liên tục từ cảm biến ESP32</p>
+                </div>
+                
+                <div class="sensor-cards">
+                    <div class="card glass-panel temp-card">
+                        <i class="fa-solid fa-temperature-half icon-large text-orange"></i>
+                        <div class="info">
+                            <h3>Nhiệt độ nước</h3><p id="current-temp">27.0 °C</p>
+                        </div>
+                    </div>
+                    <div class="card glass-panel ph-card">
+                        <i class="fa-solid fa-flask icon-large text-blue"></i>
+                        <div class="info">
+                            <h3>Độ pH</h3><p id="current-ph">7.2</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chart-container glass-panel mt-3">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h3>Biểu đồ Biến thiên Môi trường</h3>
+                        <select id="chart-time-filter" class="glass-input" style="width: 200px;">
+                            <option value="0">Trong 24 giờ qua</option>
+                            <option value="1">1 ngày trước (Hôm qua)</option>
+                            <option value="2">2 ngày trước</option>
+                            <option value="3">3 ngày trước</option>
+                        </select>
+                    </div>
+                    <canvas id="envChart"></canvas>
+                </div>
+            </section>
+
+            <!-- TAB 2: AI & MANUAL -->
+            <section id="tab-ai" class="tab-pane">
+                <div class="glass-panel ai-panel">
+                    <div class="header-title text-center">
+                        <h2>Kiểm định Tương thích Sinh thái</h2>
+                        <p>Đánh giá mức độ phù hợp của loài cá mới trước khi thả vào bể</p>
+                    </div>
+                    
+                    <div class="mode-toggle text-center mb-3">
+                        <button id="btn-mode-ai" class="mode-btn active">Nhận Diện Cá(tự động)</button>
+                        <button id="btn-mode-manual" class="mode-btn">Chọn thủ công</button>
+                    </div>
+
+                    <!-- Khu vực Upload AI -->
+                    <div id="ai-section">
+                        <div class="upload-section" id="upload-zone">
+                            <input type="file" id="file-input" accept="image/*" hidden>
+                            <div class="upload-content">
+                                <i class="fa-solid fa-cloud-arrow-up icon-huge text-blue"></i>
+                                <p>Kéo thả ảnh cá vào đây hoặc <span>chọn file</span></p>
+                            </div>
+                            <img id="preview-image" src="" alt="Preview">
+                        </div>
+                        <button id="analyze-btn" class="btn-gradient" disabled>Nhận diện & Đánh giá</button>
+                    </div>
+
+                    <!-- Khu vực Chọn thủ công -->
+                    <div id="manual-section" class="hidden">
+                        <div class="input-group mb-3">
+                            <label>Tên loài cá dự định thả:</label>
+                            <input type="text" id="manual-fish-name" list="fish-list" class="glass-input" style="width: 100%;" placeholder="vd: Cá Bảy Màu">
+                        </div>
+                        <div class="input-group mb-3">
+                            <label>Số lượng (con):</label>
+                            <input type="number" id="manual-fish-qty" class="glass-input" style="width:100%" value="1" min="1">
+                        </div>
+                        <div class="text-center">
+                            <button id="manual-analyze-btn" class="btn-gradient" style="width: auto; padding: 12px 30px; border-radius: 30px;">Hỏi Cố vấn Sinh thái</button>
+                        </div>
+                    </div>
+
+                    <div id="loading" class="hidden text-center mt-3">
+                        <div class="spinner"></div>
+                        <p>Hệ thống đang đối chiếu chéo (Nhiệt độ, pH, Bầy đàn)...</p>
+                    </div>
+
+                    <div id="result-section" class="hidden">
+                        <div class="result-card glass-panel" id="ai-result-box">
+                            <h3><i class="fa-solid fa-microchip"></i> Kết quả Nhận diện (AI)</h3>
+                            <div class="info-group">
+                                <span class="label">Phân loại:</span><span class="value text-primary" id="res-species">---</span>
+                            </div>
+                            <div class="info-group">
+                                <span class="label">Độ tự tin:</span><span class="value text-green" id="res-confidence">---</span>
+                            </div>
+                        </div>
+                        
+                        <h4 class="mt-3 text-yellow"><i class="fa-solid fa-scale-balanced"></i> Phân tích Sinh thái 3 Lớp</h4>
+                        <div class="glass-panel" style="background: rgba(0,0,0,0.2);">
+                            <div class="result-item">
+                                <span class="label">1. Đánh giá Môi trường chung:</span>
+                                <span class="value text-bold" id="res-overall">...</span>
+                            </div>
+                            <div class="result-item">
+                                <span class="label">2. Đối chiếu Cảm biến (Nhiệt/pH):</span>
+                                <span class="value" id="res-detail">...</span>
+                            </div>
+                            <div class="result-item">
+                                <span class="label">3. Khả năng hòa nhập bầy đàn:</span>
+                                <span class="value" id="res-detail-group">...</span>
+                            </div>
+                            <div class="result-item">
+                                <span class="label">4. Mật độ hồ (Không gian sống):</span>
+                                <span class="value" id="res-detail-capacity">...</span>
+                            </div>
+                        </div>
+                        
+                        <div class="result-card highlight glass-panel">
+                            <h3><i class="fa-solid fa-shield-cat"></i> Báo cáo Tương thích Tổng thể</h3>
+                            <p id="res-advice" style="font-weight: bold; font-size: 1.2rem; margin-bottom: 15px;">---</p>
+                            
+                            <ul class="compatibility-list">
+                                <li>
+                                    <i class="fa-solid fa-temperature-half text-orange"></i> 
+                                    <span>Nhiệt độ:</span> <b id="res-detail-temp">---</b>
+                                </li>
+                                <li>
+                                    <i class="fa-solid fa-flask text-blue"></i> 
+                                    <span>Độ pH:</span> <b id="res-detail-ph">---</b>
+                                </li>
+                                <li>
+                                    <i class="fa-solid fa-fish text-green"></i> 
+                                    <span>Cá trong hồ:</span> <b id="res-detail-group">---</b>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 5: QUẢN LÝ ĐÀN CÁ & THỂ TÍCH -->
+            <section id="tab-fish" class="tab-pane">
+                <div class="header-title">
+                    <h2>Thiết lập Hồ & Quản lý Đàn cá</h2>
+                    <p>Cung cấp số liệu để AI Tư vấn chuẩn xác hơn</p>
+                </div>
+                
+                <div style="display: flex; gap: 20px;">
+                    <!-- Thiết lập Kích thước Hồ -->
+                    <div class="glass-panel" style="flex: 1;">
+                        <h3 class="text-primary"><i class="fa-solid fa-ruler-combined"></i> Kích thước Hồ (cm)</h3>
+                        <p style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 20px;">AI sẽ dựa vào đây để tính Mật độ không gian.</p>
+                        
+                        <div class="input-group">
+                            <label>Chiều Dài (cm)</label><br>
+                            <input type="number" id="set-tank-l" class="glass-input" style="width:100%" value="60">
+                        </div>
+                        <div class="input-group mt-3">
+                            <label>Chiều Rộng (cm)</label><br>
+                            <input type="number" id="set-tank-w" class="glass-input" style="width:100%" value="40">
+                        </div>
+                        <div class="input-group mt-3">
+                            <label>Chiều Cao (cm)</label><br>
+                            <input type="number" id="set-tank-h" class="glass-input" style="width:100%" value="40">
+                        </div>
+                        
+                        <div class="mt-3" style="padding: 10px; background: rgba(56, 189, 248, 0.1); border-radius: 8px;">
+                            <strong>Tổng Thể tích: </strong> <span id="tank-volume" class="text-blue text-bold">96</span> Lít
+                        </div>
+                        <div class="mt-3 text-right">
+                            <button id="btn-save-tank" class="btn-gradient" style="width: auto; padding: 8px 20px; border-radius: 8px; font-size: 0.9rem;">Lưu Kích thước</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Quản lý bầy cá -->
+                    <div class="glass-panel" style="flex: 2;">
+                        <h3 class="text-yellow"><i class="fa-solid fa-fish-fins"></i> Cá Đang Nuôi Trong Hồ</h3>
+                        
+                        <!-- Form Thêm Cá -->
+                        <div class="input-group mb-3">
+                            <label>Tên loài cá:</label>
+                            <input type="text" id="add-fish-name" list="fish-list" class="glass-input" style="width:100%" placeholder="vd: Cá Bảy Màu">
+                        </div>
+                        <div class="input-group mb-3">
+                            <label>Số lượng (con):</label>
+                            <input type="number" id="add-fish-qty" class="glass-input" style="width:100%" value="1" min="1">
+                        </div>
+                        <div style="text-align: right; margin-bottom: 20px;">
+                            <button id="btn-add-fish" class="btn-gradient" style="width: auto; padding: 10px 25px; border-radius: 8px;">+ Thêm vào hồ</button>
+                        </div>
+                        
+                        <!-- Bảng Danh Sách Cá -->
+                        <div style="overflow-x: auto;">
+                            <table class="styled-table">
+                                <thead>
+                                    <tr>
+                                        <th>Loài Cá</th>
+                                        <th>Số Lượng</th>
+                                        <th>Tiêu hao Thể tích</th>
+                                        <th>Hành động</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="fish-list-tbody">
+                                    <!-- Render từ JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 3: ĐIỀU KHIỂN & CÀI ĐẶT TRUNG TÂM -->
+            <section id="tab-control" class="tab-pane">
+                <div class="header-title">
+                    <h2>Trung tâm Điều khiển & Cài đặt IoT</h2>
+                    <p>Thiết lập thông số cho mạch ESP32</p>
+                </div>
+                
+                <form id="settings-form">
+                    <div class="control-grid mb-3">
+                        
+                        <!-- CÀI ĐẶT MÔI TRƯỜNG & CẢM BIẾN -->
+                        <div class="control-card glass-panel" style="text-align: left;">
+                            <h3><i class="fa-solid fa-gear text-primary"></i> Môi trường & Cảm biến</h3>
+                            <div class="mt-3">
+                                <label>Ngưỡng Nhiệt độ an toàn (°C)</label><br>
+                                <input type="number" id="set-temp-min" class="glass-input" style="width:45%" step="0.1"> - 
+                                <input type="number" id="set-temp-max" class="glass-input" style="width:45%" step="0.1">
+                            </div>
+                            <div class="mt-3">
+                                <label>Ngưỡng Độ pH an toàn</label><br>
+                                <input type="number" id="set-ph-min" class="glass-input" style="width:45%" step="0.1"> - 
+                                <input type="number" id="set-ph-max" class="glass-input" style="width:45%" step="0.1">
+                            </div>
+                            <div class="mt-3">
+                                <label>Cảnh báo cạn nước (%)</label><br>
+                                <input type="number" id="set-water-min" class="glass-input" style="width:100%" placeholder="Ví dụ: 30" step="1">
+                                <p style="font-size: 0.8rem; color: #f87171; margin-top: 5px;">* Hệ thống sẽ rú còi nếu nước dưới mức này.</p>
+                            </div>
+                            <div class="mt-3">
+                                <label>Tần suất gửi dữ liệu (giây)</label><br>
+                                <input type="number" id="set-chu-ky" class="glass-input" style="width:100%" placeholder="Ví dụ: 60">
+                            </div>
+                        </div>
+
+                        <!-- ĐIỀU KHIỂN ĐÈN -->
+                        <div class="control-card glass-panel" style="text-align: left;">
+                            <div class="control-header" style="text-align: center; margin-bottom: 10px;">
+                                <i class="fa-regular fa-lightbulb icon-large text-yellow"></i>
+                                <h3>Đèn chiếu sáng</h3>
+                            </div>
+                            
+                            <label>Chế độ hoạt động:</label>
+                            <select id="set-che-do-den" class="glass-input" style="width: 100%; margin-bottom: 15px;">
+                                <option value="manual">Thủ công (Bật/Tắt tay)</option>
+                                <option value="auto_sensor">Auto (Tự bật khi trời tối)</option>
+                                <option value="timer">Hẹn giờ</option>
+                            </select>
+                            
+                            <!-- Bật tắt thủ công -->
+                            <div id="den-manual-group" style="text-align: center;">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="light-toggle">
+                                    <span class="slider"></span>
+                                </label>
+                                <p class="status-text mt-3">Trạng thái: <span id="light-status">Đang tắt</span></p>
+                            </div>
+                            
+                            <!-- Hẹn giờ -->
+                            <div id="den-timer-group" class="hidden">
+                                <label>Giờ bật:</label>
+                                <input type="time" id="set-den-bat" class="glass-input" style="width: 100%; margin-bottom: 10px;">
+                                <label>Giờ tắt:</label>
+                                <input type="time" id="set-den-tat" class="glass-input" style="width: 100%;">
+                            </div>
+                        </div>
+
+                        <!-- ĐIỀU KHIỂN BƠM/OXY -->
+                        <div class="control-card glass-panel" style="text-align: left;">
+                            <div class="control-header" style="text-align: center; margin-bottom: 10px;">
+                                <i class="fa-solid fa-fan icon-large text-blue"></i>
+                                <h3>Bơm Lọc & Sục Oxy</h3>
+                            </div>
+                            
+                            <label>Chế độ hoạt động:</label>
+                            <select id="set-che-do-bom" class="glass-input" style="width: 100%; margin-bottom: 15px;">
+                                <option value="manual">Thủ công (Bật/Tắt tay)</option>
+                                <option value="timer">Hẹn giờ (Chạy luân phiên)</option>
+                            </select>
+                            
+                            <!-- Bật tắt thủ công -->
+                            <div id="bom-manual-group" style="text-align: center;">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="pump-toggle">
+                                    <span class="slider"></span>
+                                </label>
+                                <p class="status-text mt-3">Trạng thái: <span id="pump-status">Đang tắt</span></p>
+                            </div>
+                            
+                            <!-- Hẹn giờ -->
+                            <div id="bom-timer-group" class="hidden">
+                                <label>Giờ bật:</label>
+                                <input type="time" id="set-bom-bat" class="glass-input" style="width: 100%; margin-bottom: 10px;">
+                                <label>Giờ tắt:</label>
+                                <input type="time" id="set-bom-tat" class="glass-input" style="width: 100%;">
+                            </div>
+                        </div>
+
+                    </div>
+                    
+                    <button type="button" id="btn-save-settings" class="btn-gradient">Lưu Tất Cả Cài Đặt Khởi Động</button>
+                    <p id="save-status" class="text-green text-center mt-3 hidden">Đã lưu cài đặt thành công!</p>
+                </form>
+            </section>
+
+            <!-- TAB 4: LỊCH SỬ -->
+            <section id="tab-history" class="tab-pane">
+                <div class="header-title">
+                    <h2>Lịch sử Hoạt động & Sự cố</h2>
+                </div>
+                
+                <!-- Bảng 1: Lịch sử Sự cố Hệ thống -->
+                <div class="glass-panel" style="margin-bottom: 30px;">
+                    <h3 class="text-red"><i class="fa-solid fa-triangle-exclamation"></i> Lịch sử Cảnh báo Hệ thống</h3>
+                    <p style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 20px;">Ghi nhận các lần hồ cá vượt ngưỡng an toàn (Nhiệt độ, pH, Cạn nước).</p>
+                    <div style="overflow-x: auto;">
+                        <table class="styled-table">
+                            <thead>
+                                <tr>
+                                    <th>Thời gian</th>
+                                    <th>Loại Sự cố</th>
+                                    <th>Nội dung Cảnh báo</th>
+                                </tr>
+                            </thead>
+                            <tbody id="alert-history-tbody">
+                                <!-- JS render -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Bảng 2: Lịch sử Nhận diện AI -->
+                <div class="glass-panel">
+                    <h3 class="text-primary"><i class="fa-solid fa-camera"></i> Lịch sử Phân tích AI Camera</h3>
+                    <p style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 20px;">Dữ liệu nhận diện các giống cá đã được người dùng kiểm tra.</p>
+                    <div style="overflow-x: auto;">
+                        <table class="styled-table">
+                            <thead>
+                                <tr>
+                                    <th>Ảnh Nhận Diện</th>
+                                    <th>Loại Cá Phát Hiện</th>
+                                    <th>Tỷ Lệ Chính Xác</th>
+                                    <th>Thời Gian</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ai-history-tbody">
+                                <!-- JS render -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+    
+    <!-- Datalist gợi ý cá -->
+    <datalist id="fish-list">
+        <option value="Cá Bảy Màu">
+        <option value="Cá La Hán">
+        <option value="Cá Chép Koi">
+    </datalist>
+
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,68 @@
+TƯ VẤN THIẾT KẾ ĐỀ TÀI KHÓA LUẬN HỆ THỐNG NHẬN DIỆN CÁ VÀ ĐÁNH GIÁ MÔI TRƯỜNG BỂ NUÔI
+Xin lỗi bạn vì tôi đã hiểu nhầm ý định ở phần Camera. Bạn hoàn toàn đúng, ở yêu cầu ban đầu bạn đã ghi rõ Camera Realtime là phần mở rộng sau này. Việc tập trung vào Upload ảnh sẽ làm đề tài nhẹ nhàng, dễ triển khai qua Web hơn rất nhiều.
+
+Đặc biệt, ý tưởng nhận diện cá đó có phù hợp với bể không là một sự kết hợp TUYỆT VỜI giữa AI và IoT. Nó tạo ra một Sợi dây liên kết logic cho đề tài AI nhận diện loài cá - Hệ thống tra cứu yêu cầu sống của loài đó - Đối chiếu với dữ liệu IoT realtime của bể (Nhiệt độ, pH) - Đưa ra khuyến nghị.
+
+Dưới đây là bản thiết kế đã cập nhật lại hoàn toàn theo hướng này
+
+1. Đánh giá tính khả thi của đề tài
+Xuất sắc và Cực kỳ Logic. Sự kết hợp giữa AI và IoT giờ đây không còn rời rạc (một bên nhận diện, một bên đo môi trường) mà đã tích hợp sâu vào quy trình nghiệp vụ Đánh giá độ tương thích sinh thái trước khi thả cá mới vào bể. Đây là điểm cộng rất lớn trước hội đồng.
+
+2. Tên đề tài đề xuất
+Tên chính thức Nghiên cứu ứng dụng Deep Learning trong nhận diện loài cá và kết hợp IoT đánh giá độ tương thích môi trường bể nuôi.
+Tên tiếng Anh Applying Deep Learning for Fish Species Detection and IoT-based Compatibility Assessment in Aquarium Environments.
+3. Hướng triển khai AI
+Hướng Object Detection với YOLOv8-nano. Mặc dù bạn chỉ dùng ảnh chụp upload lên, Object Detection vẫn tốt hơn Classification vì
+
+Ảnh người dùng chụp có thể dính cả bể, cảnh vật, tay người. YOLO sẽ khoanh vùng chính xác (Bounding box) con cá ở đâu rồi mới phân loại.
+Phát hiện được nhiều con cá cùng lúc nếu trong ảnh upload có nhiều con.
+4. Loài cá nên chọn (Phương án 1)
+Cá Ba đuôi (Goldfish) Sống ở nước mát (20-23°C), pH 7.0-8.4.
+Cá Bảy màu (Guppy) Nước ấm (22-28°C), pH 7.0-8.0.
+Cá Bình tích (Molly) Nước ấm (24-28°C), pH 7.5-8.5.
+Cá Sọc ngựa (Zebra Danio) Nước mát (18-24°C), pH 6.5-7.0. Sự khác biệt về khoảng Nhiệt độ và pH lý tưởng giữa các loài này sẽ là dữ liệu nền tảng cực tốt để hệ thống Đánh giá mức độ phù hợp của bạn hoạt động.
+5. Chiến lược Dataset
+Tổng số ảnh ~1,500 ảnh.
+Nguồn Ảnh Internet + Ảnh tự chụp bằng điện thoại ở nhiều góc độ (không cần camera cố định).
+Augmentation Flip ngang, Crop, thay đổi ánh sáng (BrightContrast), Blur (giả lập ảnh chụp bị rung tay).
+6. Quy trình Training & Thí nghiệm AI
+Vẫn dùng Google Colab, YOLOv8n, chia tập TrainValTest.
+Thí nghiệm nghiên cứu Đánh giá độ chính xác của AI khi test trên các tập ảnh khó Ảnh thiếu sáng, ảnh cá bị tay người che lấp, ảnh mờ do điện thoại rung.
+7. Kiến trúc IoT ESP32 (Phần Môi trường)
+Cảm biến Nhiệt độ DS18B20.
+Cảm biến độ pH Module PH-4502C.
+ESP32 liên tục đọc dữ liệu và gửi lên Database (thông qua Backend FastAPI) mỗi 1-5 phút.
+8. Quy trình Logic cốt lõi (AI + IoT)
+Cảm biến gửi dữ liệu Nhiệt độ (VD 25°C) và pH (VD 7.2) hiện tại của bể lên hệ thống.
+Người dùng chuẩn bị thả cá mới, họ mở Web Dashboard - Chọn Upload ảnh.
+Model AI YOLO nhận diện - Trả kết quả Cá Sọc ngựa (Zebra Danio), Confidence 89%.
+Hệ thống Backend truy vấn Database Yêu cầu của Sọc ngựa là Nhiệt độ 18-24°C, pH 6.5-7.0.
+Hệ thống so sánh Nhiệt độ hiện tại 25°C (Hơi nóng), pH 7.2 (Hơi kiềm).
+Dashboard hiển thị CẢNH BÁO Môi trường hiện tại không lý tưởng cho cá Sọc ngựa. Nhiệt độ và pH đang cao hơn mức cho phép.
+9. Kiến trúc Hệ thống (Hoạt động hoàn toàn trên LaptopPC)
+Backend (FastAPI - Python) Nhận ảnh upload từ Web, gọi YOLO xử lý, xử lý logic so sánh môi trường, cung cấp API lưuđọc dữ liệu IoT.
+Database (MySQL) Lưu trữ lịch sử IoT, Thông tin tiêu chuẩn sinh thái của 4 loài cá, Lịch sử các lần upload nhận diện.
+Web Frontend (HTMLJSVueLaravel tùy ý) Giao diện Dashboard (hiển thị biểu đồ IoT bằng Chart.js) và trang Upload Ảnh nhận diện.
+10. Chi phí phần cứng dự kiến (Siêu rẻ)
+Bể cá mini + Lọc 150k - 200k
+Cá mẫu 50k
+ESP32 + DS18B20 + Cảm biến pH ~300k - 400k (Đã loại bỏ Camera Webcam). Tổng cộng ~600k VNĐ.
+11. Độ khó & Lộ trình thực hiện (Dự kiến 2-3 tháng)
+Phase 1 (Tuần 1-2) Code ESP32 đọc Nhiệt độ + pH đẩy lên local PC. Test lưu thử vào MySQL.
+Phase 2 (Tuần 3-5) Build Dataset cá bằng cách tự lấy điện thoại chụp + lấy ảnh trên mạng. Train YOLO trên Colab.
+Phase 3 (Tuần 6-8) Code Backend FastAPI Tích hợp load model YOLO, code API nhận ảnh upload, code hàm logic so sánh sự phù hợp sinh thái.
+Phase 4 (Tuần 9-10) Thiết kế giao diện Web Dashboard, ráp API. Viết báo cáo.
+12. Kịch bản Demo Hội đồng (Gây ấn tượng mạnh)
+Bật thiết bị IoT Cho ESP32 chạy, hiển thị Dashboard Web thấy Nhiệt độ và pH đang cập nhật theo thời gian thực (ví dụ Nhiệt độ bể đang là 28°C, pH 8.0).
+Kịch bản Khách mua cá về Giả sử người dùng vừa mua một bịch cá mới, không rõ cá gì và có hợp bể không. Họ mở Web, chụp ảnh bịch cá upload lên.
+AI Nhận diện Chọn ảnh cá Guppy tải lên. AI trả kết quả Bounding Box Guppy 95%.
+Hệ thống tư vấn (Logic AI + IoT) Web hiển thị Cá Bảy Màu (Guppy). Yêu cầu 22-28°C, pH 7.0-8.0. Trạng thái bể hiện tại Phù hợp. Đề xuất An toàn để thả cá.
+Test ca thất bại Tải ảnh cá Zebra Danio. Web cảnh báo ngay lập tức Cá Sọc Ngựa. Bể đang quá nóng (28°C) và độ pH quá cao (8.0). Cảnh báo Không nên thả cá.
+13. Tính năng BẮT BUỘC
+Tính năng Upload ảnh và YOLO nhận diện chính xác.
+Tính năng hiển thị thông số IoT realtime.
+Tính năng cốt lõi So sánh và Đánh giá độ tương thích của loài cá được nhận diện với thông số bể hiện tại.
+14. Tính năng NÂNG CAO (Hướng mở rộng trong báo cáo)
+Hỗ trợ Camera trực tiếp quét vào bể (Thay vì upload ảnh).
+Tích hợp tính năng tự động bật quạt tản nhiệtbơm nước nếu hệ thống báo môi trường không phù hợp.
+Đưa hệ thống lên TV Box để chạy độc lập 247 thay vì phụ thuộc Laptop.
