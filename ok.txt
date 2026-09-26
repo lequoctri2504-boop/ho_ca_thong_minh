@@ -1,0 +1,65 @@
+TỔNG HỢP NỘI DUNG LUẬN VĂN: HỆ THỐNG NHẬN DIỆN CÁ VÀ ĐÁNH GIÁ MÔI TRƯỜNG BỂ NUÔI
+
+1. Tên và Mục tiêu cốt lõi
+- Tên đề tài: Nghiên cứu ứng dụng Deep Learning trong nhận diện loài cá và kết hợp IoT đánh giá độ tương thích môi trường bể nuôi.
+- Mục tiêu: Giúp người dùng kiểm tra xem một loại cá mới mua có phù hợp để thả vào hồ cá hiện tại hay không, dựa trên 3 tiêu chí: Môi trường (Nhiệt độ, pH), Mật độ (Không gian sống) và Xã hội (Tính hung dữ/Hòa bình). (Tìm hiểu trên các nguồn uy tín có xác thực, trích dẫn nguồn mô tả database cần những gì).
+- Tính mới: Kết hợp với việc phát triển Website thân thiện để người dân dễ dàng sử dụng (Sau này có thể mở rộng thành App trên Android Studio).
+
+2. Mô hình hoạt động (Luồng chạy của hệ thống)
+- Bước 1 (IoT): Mạch ESP32 gắn ở bể cá sẽ đọc dữ liệu từ cảm biến Nhiệt độ và pH, sau đó gửi (liên tục hoặc theo chu kỳ cài đặt của người dùng) lên Server qua giao thức MQTT.
+- Bước 2 (Upload): Người dùng muốn mua cá mới, dùng điện thoại tải ảnh con cá đó và Upload lên Website của hệ thống (Sau này có thể mở rộng chụp trực tiếp).
+- Bước 3 (AI Nhận diện): Model AI (YOLOv8) xử lý bức ảnh và kết luận loại cá (VD: Cá Bảy Màu, độ chính xác 95%).
+- Bước 4 (Hệ chuyên gia Tư vấn - Tích hợp Fuzzy Logic (scikit-fuzzy)): Server sẽ lấy yêu cầu sống của loại cá vừa nhận diện được (trong Database) để đánh giá thông qua logic mờ và so sánh với:
+  + Dữ liệu Nhiệt độ, pH hiện tại của bể (Từ MQTT).
+  + Thể tích hồ còn trống (Để xem có bị chật không).
+  + Danh sách các loại cá đang nuôi trong hồ (Để xem có cắn nhau không).
+- Bước 5 (Kết luận): Giao diện Web hiển thị lời khuyên: "An toàn, có thể thả" hoặc "Cảnh báo nguy hiểm, không nên thả", hiển thị thêm điểm % độ phù hợp.
+
+3. Quy mô Dataset (AI)
+- Phương pháp: Nhận diện đối tượng (Object Detection) bằng YOLOv8.
+- Các loại cá mục tiêu (20 loại cá phổ biến):
+  1. Cá Bảy màu (Guppy) - Đã làm xong dataset.
+  2. ... (Cần danh sách 19 loại cá còn lại kèm nguồn tài liệu chuẩn).
+
+4. Phần cứng IoT
+- Mạch điều khiển trung tâm: ESP32.
+- Cảm biến: Nhiệt độ nước (DS18B20) và Cảm biến độ pH (PH-4502C).
+- Cảm biến mực nước siêu âm (Có thể mở rộng sau này).
+- Khả năng điều khiển: ESP32 có thể nhận lệnh từ Web để bật/tắt thiết bị (Đèn, Bơm), hỗ trợ hẹn giờ tự động, và CÓ CÁC NÚT BẤM VẬT LÝ để bật tắt thủ công tại chỗ.
+
+5. Những công việc còn lại (Cần hoàn thiện)
+- Gom dataset, gán nhãn và train lại model YOLO cho 19 loại cá.
+- Viết mã nguồn (C/C++) nạp cho mạch ESP32 để đọc cảm biến và giao tiếp MQTT với Server FastAPI.
+- Xây dựng hệ thống tư vấn AI (Tích hợp Fuzzy Logic).
+- Tìm kiếm dữ liệu sinh thái của 20 loại cá lấy từ nguồn thông tin chuẩn xác (Bách khoa toàn thư, FishBase) và trích nguồn đầy đủ vào Database.
+
+==================================================
+PHẦN BỔ SUNG: CHI TIẾT HOẠT ĐỘNG WEB VÀ ESP32
+==================================================
+
+6. CÁC CHỨC NĂNG HOẠT ĐỘNG CỦA WEBSITE (Giao diện chuẩn gồm 5 Tab)
+- Tab 1: Tổng quan IoT (Dashboard): 
+  + Hiển thị thông số Nhiệt độ, pH hiện tại nhận được từ ESP32 qua MQTT. 
+  + Vẽ biểu đồ lịch sử Nhiệt độ/pH/Mực nước (dùng Chart.js) theo bộ lọc thời gian (24h qua, hôm qua...).
+- Tab 2: Tư vấn cá phù hợp (AI & Manual): 
+  + Hỗ trợ 2 chế độ: Tải ảnh cá lên để AI YOLO nhận diện hoặc Nhập tên cá thủ công.( sẽ mở rộng thêm chức năng tư vấn cá này vào hồ sau khi nhận diện)
+  + Trả về kết quả đánh giá sinh thái dựa trên thuật toán Fuzzy Logic (So sánh Nhiệt độ, pH, Bầy đàn, Mật độ hồ) và đưa ra lời khuyên "An toàn/Nguy hiểm/...".
+- Tab 3: Quản lý Đàn cá (Thiết lập Hồ): 
+  + Cài đặt kích thước bể (Dài x Rộng x Cao) để tính ra thể tích Lít.
+  + Thêm/xóa danh sách các loài cá đang bơi thực tế trong hồ, từ đó hệ thống sẽ trừ hao thể tích và kiểm tra tính xung đột bầy đàn.
+- Tab 4: Điều khiển & Cài đặt Thiết bị: 
+  + Cài đặt ngưỡng môi trường an toàn (Min/Max của Nhiệt độ, pH, Mực nước(mở rộng sau này)).
+  + Điều khiển Đèn và Bơm/Oxy qua 3 chế độ: Thủ công (Nút gạt bật/tắt trực tiếp), Tự động (Auto) và Hẹn giờ.
+  + Cài đặt chu kỳ thời gian (tần suất) để ESP32 gửi dữ liệu cảm biến.
+- Tab 5: Lịch sử Hệ thống: 
+  + Bảng lưu vết Cảnh báo Sự cố (Khi nhiệt độ, pH vượt ngưỡng an toàn).
+  + Bảng lưu vết Lịch sử Nhận diện AI của người dùng.
+
+7. HOẠT ĐỘNG ĐẤU NỐI & CODE CỦA ESP32 (Thiết bị đầu cuối)
+- Đấu nối phần cứng cơ bản: 
+  + Chân tín hiệu DS18B20 và PH-4502C nối vào các chân ADC/Digital của ESP32.
+  + Cụm 2 Relay nối với đèn và máy bơm sủi oxy.
+  + Cụm Nút nhấn vật lý gắn trên hộp thiết bị để bật/tắt thủ công cục bộ.
+- Luồng gửi dữ liệu (Publish): ESP32 đọc các cảm biến, đóng gói thành chuỗi JSON (chứa Nhiệt độ, pH). Dựa vào chu kỳ thời gian (do Web gửi xuống), ESP32 sẽ publish chuỗi này lên Topic MQTT (VD: hoca/sensors).
+- Luồng nhận lệnh (Subscribe): ESP32 luôn lắng nghe Topic (VD: hoca/commands). Khi Web gửi lệnh "DEN_ON", ESP32 kích relay bật đèn. Khi Web gửi lệnh "CHU_KY_5", ESP32 cập nhật lại thời gian gửi data là 5 phút.
+- Xử lý đồng bộ Nút bấm cứng: Khi người dùng nhấn nút vật lý ngoài đời thực để bật Bơm, ESP32 sẽ kích relay, ĐỒNG THỜI bắn một tin nhắn lên MQTT báo cáo cho Server để Website tự động gạt nút Bơm sang trạng thái ON (Đồng bộ 2 chiều).

@@ -4,6 +4,7 @@ import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
 from ket_noi_db import lay_ket_noi
 from xu_ly_ai import nhan_dien_ca
+from fuzzy_logic import tinh_toan_fuzzy
 import os
 import datetime
 import json
@@ -95,17 +96,32 @@ def tu_van_tuong_thich(ma_loai_ca, so_luong=1):
     ket_qua["id_loai_ca"] = ca_moi['id']
     ket_qua["ten_ca"] = ca_moi['ten_hien_thi']
     
-    # LỚP 1: MÔI TRƯỜNG (Nhiệt độ, pH)
+    # LỚP 1: MÔI TRƯỜNG (Fuzzy Logic: Nhiệt độ, pH)
     cursor.execute("SELECT * FROM du_lieu_cam_bien ORDER BY id DESC LIMIT 1")
     cam_bien = cursor.fetchone()
     nhiet_hien_tai = cam_bien['nhiet_do'] if cam_bien else 27.0
     ph_hien_tai = cam_bien['do_ph'] if cam_bien else 7.2
     
-    hop_nhiet = ca_moi['nhiet_do_min'] <= nhiet_hien_tai <= ca_moi['nhiet_do_max']
-    ket_qua["chi_tiet_nhiet"] = "An toàn" if hop_nhiet else f"Nguy hiểm: Yêu cầu {ca_moi['nhiet_do_min']}-{ca_moi['nhiet_do_max']}°C (Hiện tại: {nhiet_hien_tai}°C)"
+    kq_fuzzy = tinh_toan_fuzzy(
+        nhiet_hien_tai, ca_moi['nhiet_do_min'], ca_moi['nhiet_do_max'],
+        ph_hien_tai, ca_moi['ph_min'], ca_moi['ph_max']
+    )
+    diem_fuzzy = kq_fuzzy["diem_phu_hop"]
+    danh_gia_fuzzy = kq_fuzzy["danh_gia"]
     
-    hop_ph = ca_moi['ph_min'] <= ph_hien_tai <= ca_moi['ph_max']
-    ket_qua["chi_tiet_ph"] = "An toàn" if hop_ph else f"Nguy hiểm: Yêu cầu pH {ca_moi['ph_min']}-{ca_moi['ph_max']} (Hiện tại: {ph_hien_tai})"
+    ket_qua["diem_phu_hop"] = diem_fuzzy
+    
+    if kq_fuzzy['delta_temp'] == 0:
+        ket_qua["chi_tiet_nhiet"] = "An toàn"
+    else:
+        trang_thai = "Nóng hơn" if kq_fuzzy['delta_temp'] > 0 else "Lạnh hơn"
+        ket_qua["chi_tiet_nhiet"] = f"{trang_thai} {abs(kq_fuzzy['delta_temp'])}°C so với ngưỡng (Chuẩn: {ca_moi['nhiet_do_min']}-{ca_moi['nhiet_do_max']}°C, Hiện tại: {nhiet_hien_tai}°C)"
+        
+    if kq_fuzzy['delta_ph'] == 0:
+        ket_qua["chi_tiet_ph"] = "An toàn"
+    else:
+        trang_thai = "Kiềm hơn" if kq_fuzzy['delta_ph'] > 0 else "Chua hơn"
+        ket_qua["chi_tiet_ph"] = f"{trang_thai} {abs(kq_fuzzy['delta_ph'])} so với ngưỡng (Chuẩn: {ca_moi['ph_min']}-{ca_moi['ph_max']}, Hiện tại: {ph_hien_tai})"
     
     # LỚP 2: MẬT ĐỘ (Không gian sinh tồn)
     cursor.execute("SELECT * FROM cai_dat_ho WHERE id = 1")
@@ -148,13 +164,14 @@ def tu_van_tuong_thich(ma_loai_ca, so_luong=1):
             hop_bay = False
             break
             
-    # TỔNG KẾT
-    ket_qua["an_toan_tong_the"] = hop_nhiet and hop_ph and hop_mat_do and hop_bay
+    # TỔNG KẾT (Kết hợp Fuzzy Logic và Logic Tuyệt đối)
+    hop_moi_truong = diem_fuzzy >= 40 # Ít nhất phải mức Rủi ro trở lên mới cho thả
+    ket_qua["an_toan_tong_the"] = hop_moi_truong and hop_mat_do and hop_bay
     
     if ket_qua["an_toan_tong_the"]:
-        ket_qua["loi_khuyen"] = "TUYỆT VỜI! 3 Lớp sinh thái đều an toàn. Có thể thả cá."
+        ket_qua["loi_khuyen"] = f"CÓ THỂ THẢ CÁ! Độ an toàn môi trường: {diem_fuzzy}% ({danh_gia_fuzzy}). Mật độ và Bầy đàn an toàn."
     else:
-        ket_qua["loi_khuyen"] = "KHÔNG AN TOÀN! Hệ thống phát hiện xung đột sinh thái. Xem chi tiết bên dưới."
+        ket_qua["loi_khuyen"] = f"KHÔNG NÊN THẢ CÁ! Độ an toàn môi trường: {diem_fuzzy}% ({danh_gia_fuzzy}). Có xung đột sinh thái (Xem chi tiết bên dưới)."
         
     cursor.close()
     conn.close()
@@ -345,6 +362,81 @@ def api_lay_bieu_do(ngay: int = 0):
     cursor.close()
     conn.close()
     return du_lieu
+
+# --- API CHO TRANG ADMIN (CRUD LOÀI CÁ) ---
+class LoaiCaRequest(BaseModel):
+    ma_loai: str
+    ten_hien_thi: str
+    ten_tieng_anh: str = ""
+    ten_khoa_hoc: str = ""
+    nhiet_do_min: float
+    nhiet_do_max: float
+    ph_min: float
+    ph_max: float
+    the_tich_yeu_cau: float
+    tinh_cach: str
+    nguon_trich_dan: str = ""
+
+@app.get("/api/admin/loai_ca")
+def get_tat_ca_loai_ca():
+    conn = lay_ket_noi()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM loai_ca")
+    data = cursor.fetchall()
+    cursor.close(); conn.close()
+    return data
+
+@app.post("/api/admin/loai_ca")
+def them_loai_ca_moi(req: LoaiCaRequest):
+    conn = lay_ket_noi()
+    cursor = conn.cursor()
+    sql = """INSERT INTO loai_ca (ma_loai, ten_hien_thi, ten_tieng_anh, ten_khoa_hoc, 
+             nhiet_do_min, nhiet_do_max, ph_min, ph_max, the_tich_yeu_cau, tinh_cach, nguon_trich_dan) 
+             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
+    try:
+        cursor.execute(sql, (req.ma_loai, req.ten_hien_thi, req.ten_tieng_anh, req.ten_khoa_hoc, 
+                             req.nhiet_do_min, req.nhiet_do_max, req.ph_min, req.ph_max, 
+                             req.the_tich_yeu_cau, req.tinh_cach, req.nguon_trich_dan))
+        conn.commit()
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        cursor.close(); conn.close()
+    return {"message": "Đã thêm loài cá mới thành công!"}
+
+@app.delete("/api/admin/loai_ca/{id}")
+def xoa_loai_ca(id: int):
+    conn = lay_ket_noi()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM loai_ca WHERE id = %s", (id,))
+    conn.commit()
+    cursor.close(); conn.close()
+    return {"message": "Đã xóa loài cá!"}
+
+# --- API YÊU CẦU THÊM CÁ TỪ USER ---
+class YeuCauCaRequest(BaseModel):
+    ten_ca: str
+
+@app.post("/api/khach/yeu_cau_ca")
+def gui_yeu_cau_them_ca(req: YeuCauCaRequest):
+    conn = lay_ket_noi()
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO yeu_cau_them_ca (ten_ca_khach_nhap) VALUES (%s)", (req.ten_ca,))
+    conn.commit()
+    cursor.close(); conn.close()
+    return {"message": "Đã gửi yêu cầu thành công!"}
+
+@app.get("/api/admin/yeu_cau")
+def lay_danh_sach_yeu_cau():
+    conn = lay_ket_noi()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM yeu_cau_them_ca ORDER BY id DESC")
+    data = cursor.fetchall()
+    for row in data:
+        if row.get('thoi_gian_tao'):
+            row['thoi_gian_tao'] = row['thoi_gian_tao'].strftime("%d/%m/%Y %H:%M")
+    cursor.close(); conn.close()
+    return data
 
 # ==========================================
 # PHÂN HỆ MQTT VÀ HẸN GIỜ TỰ ĐỘNG (BACKGROUND)

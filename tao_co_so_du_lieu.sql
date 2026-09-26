@@ -18,21 +18,24 @@ CREATE TABLE `loai_ca` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `ma_loai` VARCHAR(50) NOT NULL UNIQUE,
   `ten_hien_thi` VARCHAR(100) NOT NULL,
+  `ten_tieng_anh` VARCHAR(100),
+  `ten_khoa_hoc` VARCHAR(100),
   `nhiet_do_min` FLOAT NOT NULL,
   `nhiet_do_max` FLOAT NOT NULL,
   `ph_min` FLOAT NOT NULL,
   `ph_max` FLOAT NOT NULL,
   `the_tich_yeu_cau` FLOAT DEFAULT 5.0, -- Lít nước/con
   `tinh_cach` VARCHAR(50) DEFAULT 'Hòa bình', -- Hòa bình, Hung dữ, Rỉa vây
+  `nguon_trich_dan` VARCHAR(255),
   `mo_ta` TEXT,
   `ngay_tao` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Dữ liệu mẫu (Thể tích và Tính cách được cập nhật)
-INSERT INTO `loai_ca` (`ma_loai`, `ten_hien_thi`, `nhiet_do_min`, `nhiet_do_max`, `ph_min`, `ph_max`, `the_tich_yeu_cau`, `tinh_cach`) VALUES
-('ca_bay_mau', 'Cá Bảy Màu', 22.0, 28.0, 6.5, 7.5, 5.0, 'Hòa bình'),
-('ca_la_han', 'Cá La Hán', 26.0, 30.0, 6.5, 7.8, 150.0, 'Hung dữ'),
-('ca_chep_koi', 'Cá Chép Koi', 15.0, 25.0, 7.0, 8.5, 500.0, 'Hòa bình');
+INSERT INTO `loai_ca` (`ma_loai`, `ten_hien_thi`, `ten_tieng_anh`, `ten_khoa_hoc`, `nhiet_do_min`, `nhiet_do_max`, `ph_min`, `ph_max`, `the_tich_yeu_cau`, `tinh_cach`, `nguon_trich_dan`) VALUES
+('ca_bay_mau', 'Cá Bảy Màu', 'Guppy', 'Poecilia reticulata', 22.0, 28.0, 6.5, 7.5, 5.0, 'Hòa bình', 'SeriouslyFish.com'),
+('ca_la_han', 'Cá La Hán', 'Flowerhorn Cichlid', 'Cichlasoma sp.', 26.0, 30.0, 6.5, 7.8, 150.0, 'Hung dữ', 'FishBase.org'),
+('ca_chep_koi', 'Cá Chép Koi', 'Koi Carp', 'Cyprinus rubrofuscus', 15.0, 25.0, 7.0, 8.5, 500.0, 'Hòa bình', 'FishBase.org');
 
 CREATE TABLE `lich_su_ai` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
