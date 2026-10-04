@@ -192,10 +192,18 @@ class CaiDatRequest(BaseModel):
     trang_thai_den: bool
     hen_gio_den_bat: str
     hen_gio_den_tat: str
+    lich_den_thu: str = "2,3,4,5,6,7,8"
     che_do_bom: str
     trang_thai_bom: bool
     hen_gio_bom_bat: str
     hen_gio_bom_tat: str
+    lich_bom_thu: str = "2,3,4,5,6,7,8"
+    sieu_am_day: float = 21.0
+    sieu_am_tran: float = 3.0
+    phan_tram_thay: float = 0.0
+    lich_thay_nuoc_gio: str = ""
+    lich_thay_nuoc_thu: str = ""
+    trang_thai_relay_5: bool = False
 
 @app.get("/api/cai_dat")
 def api_lay_cai_dat():
@@ -222,33 +230,75 @@ def api_luu_cai_dat(req: CaiDatRequest):
     UPDATE cai_dat_ho SET 
         nhiet_do_min=%s, nhiet_do_max=%s, ph_min=%s, ph_max=%s, muc_nuoc_min=%s, 
         chieu_dai=%s, chieu_rong=%s, chieu_cao=%s, chu_ky_gui_data=%s,
-        che_do_den=%s, trang_thai_den=%s, hen_gio_den_bat=%s, hen_gio_den_tat=%s,
-        che_do_bom=%s, trang_thai_bom=%s, hen_gio_bom_bat=%s, hen_gio_bom_tat=%s
+        che_do_den=%s, trang_thai_den=%s, hen_gio_den_bat=%s, hen_gio_den_tat=%s, lich_den_thu=%s,
+        che_do_bom=%s, trang_thai_bom=%s, hen_gio_bom_bat=%s, hen_gio_bom_tat=%s, lich_bom_thu=%s,
+        sieu_am_day=%s, sieu_am_tran=%s, phan_tram_thay=%s, lich_thay_nuoc_gio=%s, lich_thay_nuoc_thu=%s,
+        trang_thai_relay_5=%s
     WHERE id = 1
     """
     cursor.execute(sql, (
         req.nhiet_do_min, req.nhiet_do_max, req.ph_min, req.ph_max, req.muc_nuoc_min,
         req.chieu_dai, req.chieu_rong, req.chieu_cao, req.chu_ky_gui_data,
-        req.che_do_den, req.trang_thai_den, req.hen_gio_den_bat, req.hen_gio_den_tat,
-        req.che_do_bom, req.trang_thai_bom, req.hen_gio_bom_bat, req.hen_gio_bom_tat
+        req.che_do_den, req.trang_thai_den, req.hen_gio_den_bat, req.hen_gio_den_tat, req.lich_den_thu,
+        req.che_do_bom, req.trang_thai_bom, req.hen_gio_bom_bat, req.hen_gio_bom_tat, req.lich_bom_thu,
+        req.sieu_am_day, req.sieu_am_tran, req.phan_tram_thay, req.lich_thay_nuoc_gio, req.lich_thay_nuoc_thu,
+        req.trang_thai_relay_5
     ))
     conn.commit()
     cursor.close()
     conn.close()
     
-    # Kích hoạt lệnh điều khiển MQTT NGAY LẬP TỨC nếu ở chế độ Manual
-    if req.che_do_den == 'manual':
-        lenh_den = "DEN_ON" if req.trang_thai_den else "DEN_OFF"
-        mqtt_client.publish("hoca_test/commands", lenh_den)
+    # Kích hoạt lệnh điều khiển MQTT NGAY LẬP TỨC 
+    # (Dù đang ở chế độ nào, khi user bấm trên web thì ưu tiên chạy lệnh đó)
+    lenh_den = "DEN_ON" if req.trang_thai_den else "DEN_OFF"
+    mqtt_client.publish("hoca_test/commands", lenh_den)
         
-    if req.che_do_bom == 'manual':
-        lenh_bom = "BOM_ON" if req.trang_thai_bom else "BOM_OFF"
-        mqtt_client.publish("hoca_test/commands", lenh_bom)
+    lenh_bom = "BOM_ON" if req.trang_thai_bom else "BOM_OFF"
+    mqtt_client.publish("hoca_test/commands", lenh_bom)
         
     # Phát luôn tần suất gửi cảm biến mới
     mqtt_client.publish("hoca_test/commands", f"CHU_KY_{req.chu_ky_gui_data}")
     
     return {"message": "Đã lưu cài đặt thành công và gửi lệnh MQTT"}
+
+class DieuKhienThietBiRequest(BaseModel):
+    thiet_bi: str # 'den', 'bom', 'bom_xa', 'bom_cap'
+    trang_thai: bool
+
+@app.post("/api/dieu_khien_thiet_bi")
+def api_dieu_khien_thiet_bi(req: DieuKhienThietBiRequest):
+    cmd = ""
+    if req.thiet_bi == 'den': cmd = "DEN_ON" if req.trang_thai else "DEN_OFF"
+    elif req.thiet_bi == 'bom': cmd = "BOM_ON" if req.trang_thai else "BOM_OFF"
+    elif req.thiet_bi == 'bom_xa': cmd = "BOMXA_ON" if req.trang_thai else "BOMXA_OFF"
+    elif req.thiet_bi == 'bom_cap': cmd = "BOMCAP_ON" if req.trang_thai else "BOMCAP_OFF"
+    elif req.thiet_bi == 'relay_5': cmd = "BOM5_ON" if req.trang_thai else "BOM5_OFF"
+    
+    if cmd:
+        mqtt_client.publish("hoca_test/commands", cmd)
+    return {"message": f"Đã gửi lệnh {cmd}"}
+
+class ThayNuocNhanhRequest(BaseModel):
+    phan_tram: float
+
+@app.post("/api/thay_nuoc_ngay")
+def api_thay_nuoc_ngay(req: ThayNuocNhanhRequest):
+    conn = lay_ket_noi()
+    if conn:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT muc_nuoc FROM du_lieu_cam_bien ORDER BY id DESC LIMIT 1")
+        cb = cursor.fetchone()
+        muc_nuoc_hien_tai = cb['muc_nuoc'] if cb else 100.0
+        
+        muc_tieu = max(0.0, float(muc_nuoc_hien_tai) - req.phan_tram)
+        cursor.execute("UPDATE cai_dat_ho SET dang_thay_nuoc=1, muc_tieu_xa=%s WHERE id=1", (muc_tieu,))
+        conn.commit()
+        
+        mqtt_client.publish("hoca_test/commands", "BOM_OFF") # Tắt máy lọc
+        mqtt_client.publish("hoca_test/commands", "BOMXA_ON") # Bật bơm xả
+        cursor.close(); conn.close()
+        return {"message": "Đã kích hoạt chu trình thay nước thủ công."}
+    return {"error": "Lỗi CSDL"}
 
 @app.get("/api/canh_bao")
 def api_lay_canh_bao():
@@ -263,6 +313,46 @@ def api_lay_canh_bao():
     cursor.close()
     conn.close()
     return canh_bao
+
+@app.get("/api/cam_bien_moi_nhat")
+def api_cam_bien_moi_nhat():
+    conn = lay_ket_noi()
+    if not conn: return {}
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT nhiet_do, do_ph, muc_nuoc FROM du_lieu_cam_bien ORDER BY id DESC LIMIT 1")
+    data = cursor.fetchone()
+    
+    cursor.execute("SELECT * FROM cai_dat_ho WHERE id = 1")
+    cai_dat = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    
+    if not data: return {"nhiet_do": 0, "do_ph": 0, "muc_nuoc": 0, "canh_bao": []}
+    
+    canh_bao = []
+    if cai_dat:
+        t = float(data.get('nhiet_do') or 0)
+        ph = float(data.get('do_ph') or 0)
+        w = float(data.get('muc_nuoc') or 0)
+        
+        t_min = float(cai_dat.get('nhiet_do_min', 24))
+        t_max = float(cai_dat.get('nhiet_do_max', 28))
+        ph_min = float(cai_dat.get('ph_min', 6.5))
+        ph_max = float(cai_dat.get('ph_max', 7.5))
+        w_min = float(cai_dat.get('muc_nuoc_min', 30))
+        dang_thay = cai_dat.get('dang_thay_nuoc', 0)
+        
+        if t < t_min: canh_bao.append(f"Nhiệt độ hồ quá thấp ({t:.1f}°C < {t_min}°C). Hãy kiểm tra sưởi.")
+        elif t > t_max: canh_bao.append(f"Nhiệt độ hồ quá nóng ({t:.1f}°C > {t_max}°C). Hãy giảm nhiệt.")
+        
+        if ph < ph_min: canh_bao.append(f"Độ pH quá thấp ({ph:.1f} < {ph_min}). Môi trường bị axit.")
+        elif ph > ph_max: canh_bao.append(f"Độ pH quá cao ({ph:.1f} > {ph_max}). Môi trường kiềm cao.")
+        
+        if w < w_min and dang_thay == 0:
+            canh_bao.append(f"Cảnh báo: Mực nước bốc hơi hụt quá ngưỡng an toàn ({w:.0f}% < {w_min}%). Cần châm bù nước ngay!")
+            
+    data['canh_bao'] = canh_bao
+    return data
 
 # --- API QUẢN LÝ DANH SÁCH CÁ ĐANG NUÔI ---
 class ThemCaRequest(BaseModel):
@@ -328,40 +418,77 @@ def api_lay_bieu_do(ngay: int = 0):
     if not conn: return []
     cursor = conn.cursor(dictionary=True)
     
-    # Query gom nhóm dữ liệu theo từng GIỜ để tối ưu lượng Data (tránh quá tải Chart.js)
-    # Lấy giá trị Trung bình (AVG) của Nhiệt độ, pH, Mực nước trong giờ đó
-    sql = """
-        SELECT 
-            DATE_FORMAT(thoi_gian_tao, '%%H:00') as gio,
-            AVG(nhiet_do) as nhiet_do_tb,
-            AVG(do_ph) as do_ph_tb,
-            AVG(muc_nuoc) as muc_nuoc_tb
-        FROM du_lieu_cam_bien
-        WHERE DATE(thoi_gian_tao) = DATE(NOW() - INTERVAL %s DAY)
-        GROUP BY HOUR(thoi_gian_tao)
-        ORDER BY HOUR(thoi_gian_tao) ASC
-    """
-    if ngay == 0:
-        # Nếu là 24h qua thì truy vấn từ NOW() - 24h
-        sql = """
-            SELECT 
-                DATE_FORMAT(thoi_gian_tao, '%%H:00') as gio,
-                AVG(nhiet_do) as nhiet_do_tb,
-                AVG(do_ph) as do_ph_tb,
-                AVG(muc_nuoc) as muc_nuoc_tb
-            FROM du_lieu_cam_bien
-            WHERE thoi_gian_tao >= NOW() - INTERVAL 24 HOUR
-            GROUP BY HOUR(thoi_gian_tao)
-            ORDER BY thoi_gian_tao ASC
-        """
-        cursor.execute(sql)
-    else:
-        cursor.execute(sql, (ngay,))
-        
-    du_lieu = cursor.fetchall()
-    cursor.close()
-    conn.close()
-    return du_lieu
+    try:
+        if ngay == 0:
+            sql = """
+                SELECT 
+                    DATE_FORMAT(thoi_gian, '%H:00') as gio,
+                    AVG(nhiet_do) as nhiet_do_tb,
+                    AVG(do_ph) as do_ph_tb,
+                    AVG(muc_nuoc) as muc_nuoc_tb
+                FROM du_lieu_cam_bien
+                WHERE thoi_gian >= NOW() - INTERVAL 24 HOUR
+                GROUP BY HOUR(thoi_gian)
+                ORDER BY thoi_gian ASC
+            """
+            cursor.execute(sql)
+        else:
+            sql = """
+                SELECT 
+                    DATE_FORMAT(thoi_gian, '%%H:00') as gio,
+                    AVG(nhiet_do) as nhiet_do_tb,
+                    AVG(do_ph) as do_ph_tb,
+                    AVG(muc_nuoc) as muc_nuoc_tb
+                FROM du_lieu_cam_bien
+                WHERE DATE(thoi_gian) = DATE(NOW() - INTERVAL %s DAY)
+                GROUP BY HOUR(thoi_gian)
+                ORDER BY HOUR(thoi_gian) ASC
+            """
+            cursor.execute(sql, (ngay,))
+            
+        du_lieu = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return du_lieu
+    except Exception as e:
+        print("LỖI API BIỂU ĐỒ:", e)
+        # Nếu cột là thoi_gian_tao thay vì thoi_gian, thử lại:
+        try:
+            if ngay == 0:
+                sql = """
+                    SELECT 
+                        DATE_FORMAT(thoi_gian_tao, '%H:00') as gio,
+                        AVG(nhiet_do) as nhiet_do_tb,
+                        AVG(do_ph) as do_ph_tb,
+                        AVG(muc_nuoc) as muc_nuoc_tb
+                    FROM du_lieu_cam_bien
+                    WHERE thoi_gian_tao >= NOW() - INTERVAL 24 HOUR
+                    GROUP BY HOUR(thoi_gian_tao)
+                    ORDER BY thoi_gian_tao ASC
+                """
+                cursor.execute(sql)
+            else:
+                sql = """
+                    SELECT 
+                        DATE_FORMAT(thoi_gian_tao, '%%H:00') as gio,
+                        AVG(nhiet_do) as nhiet_do_tb,
+                        AVG(do_ph) as do_ph_tb,
+                        AVG(muc_nuoc) as muc_nuoc_tb
+                    FROM du_lieu_cam_bien
+                    WHERE DATE(thoi_gian_tao) = DATE(NOW() - INTERVAL %s DAY)
+                    GROUP BY HOUR(thoi_gian_tao)
+                    ORDER BY HOUR(thoi_gian_tao) ASC
+                """
+                cursor.execute(sql, (ngay,))
+            du_lieu = cursor.fetchall()
+            cursor.close()
+            conn.close()
+            return du_lieu
+        except Exception as e2:
+            print("LỖI LẦN 2 API BIỂU ĐỒ:", e2)
+            cursor.close()
+            conn.close()
+            return []
 
 # --- API CHO TRANG ADMIN (CRUD LOÀI CÁ) ---
 class LoaiCaRequest(BaseModel):
@@ -413,6 +540,26 @@ def xoa_loai_ca(id: int):
     cursor.close(); conn.close()
     return {"message": "Đã xóa loài cá!"}
 
+@app.put("/api/admin/loai_ca/{id}")
+def sua_loai_ca(id: int, req: LoaiCaRequest):
+    conn = lay_ket_noi()
+    cursor = conn.cursor()
+    sql = """UPDATE loai_ca SET 
+             ma_loai=%s, ten_hien_thi=%s, ten_tieng_anh=%s, ten_khoa_hoc=%s, 
+             nhiet_do_min=%s, nhiet_do_max=%s, ph_min=%s, ph_max=%s, 
+             the_tich_yeu_cau=%s, tinh_cach=%s, nguon_trich_dan=%s
+             WHERE id=%s"""
+    try:
+        cursor.execute(sql, (req.ma_loai, req.ten_hien_thi, req.ten_tieng_anh, req.ten_khoa_hoc, 
+                             req.nhiet_do_min, req.nhiet_do_max, req.ph_min, req.ph_max, 
+                             req.the_tich_yeu_cau, req.tinh_cach, req.nguon_trich_dan, id))
+        conn.commit()
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        cursor.close(); conn.close()
+    return {"message": "Đã cập nhật loài cá thành công!"}
+
 # --- API YÊU CẦU THÊM CÁ TỪ USER ---
 class YeuCauCaRequest(BaseModel):
     ten_ca: str
@@ -448,43 +595,111 @@ mqtt_client = mqtt.Client(client_id="PythonServer_HoCa")
 def on_connect(client, userdata, flags, rc):
     print("✅ Đã kết nối thành công tới Trạm trung chuyển MQTT (EMQX)!")
     client.subscribe("hoca_test/sensors")
+    client.subscribe("hoca_test/status")
+    
+    # Ép tất cả các mạch ESP32 đang chạy phải báo cáo lại trạng thái Relay ngay lập tức
+    client.publish("hoca_test/commands", "GET_STATUS")
 
 def on_message(client, userdata, msg):
-    # Lắng nghe dữ liệu cảm biến từ ESP32 gửi lên
     payload = msg.payload.decode()
-    print(f"📡 Nhận dữ liệu MQTT từ ESP32: {payload}")
+    topic = msg.topic
+    print(f"📡 Nhận dữ liệu MQTT từ ESP32 [{topic}]: {payload}")
+    
     try:
         data = json.loads(payload)
+        conn = lay_ket_noi()
+        if not conn: return
+        cursor = conn.cursor(dictionary=True)
+        
+        # 1. Nếu là bản tin trạng thái nút bấm (Đèn/Bơm/Bơm Xả/Bơm Cấp)
+        if topic == "hoca_test/status":
+            den = data.get('trang_thai_den', 0)
+            bom = data.get('trang_thai_bom', 0)
+            bom_xa = data.get('trang_thai_bom_xa', 0)
+            bom_cap = data.get('trang_thai_bom_cap', 0)
+            relay_5 = data.get('trang_thai_relay_5', 0)
+            cursor.execute("UPDATE cai_dat_ho SET trang_thai_den=%s, trang_thai_bom=%s, trang_thai_bom_xa=%s, trang_thai_bom_cap=%s, trang_thai_relay_5=%s WHERE id=1", (den, bom, bom_xa, bom_cap, relay_5))
+            conn.commit()
+            cursor.close(); conn.close()
+            return
+
+        # 2. Nếu là bản tin cảm biến định kỳ
         nhiet_do = data.get('nhiet_do', 0)
         do_ph = data.get('do_ph', 0)
-        muc_nuoc = data.get('muc_nuoc', 100)
+        khoang_cach_do_duoc = data.get('muc_nuoc', 0) # Bản mới ESP32 gửi cm thô
         
         # Lưu vào MySQL
         conn = lay_ket_noi()
         if conn:
             cursor = conn.cursor(dictionary=True)
-            cursor.execute("INSERT INTO du_lieu_cam_bien (nhiet_do, do_ph, muc_nuoc) VALUES (%s, %s, %s)", (nhiet_do, do_ph, muc_nuoc))
-            
-            # --- LOGIC CẢNH BÁO THÔNG MINH ---
             cursor.execute("SELECT * FROM cai_dat_ho WHERE id = 1")
             cai_dat = cursor.fetchone()
+            
+            # --- CHUYỂN ĐỔI KHOẢNG CÁCH (CM) SANG PHẦN TRĂM (%) ---
+            if cai_dat:
+                day = cai_dat.get('sieu_am_day', 45.0)  # Khoảng cách từ siêu âm xuống đáy
+                tran = cai_dat.get('sieu_am_tran', 38.0) # tran bây giờ lưu giá trị "Mực nước Max"
+                
+                chieu_cao_nuoc_hien_tai = day - khoang_cach_do_duoc
+                if tran > 0:
+                    muc_nuoc_pt = (chieu_cao_nuoc_hien_tai / tran) * 100.0
+                else:
+                    muc_nuoc_pt = 0
+                muc_nuoc_pt = max(0.0, min(100.0, float(muc_nuoc_pt)))
+            else:
+                muc_nuoc_pt = 95.0
+                
+            cursor.execute("INSERT INTO du_lieu_cam_bien (nhiet_do, do_ph, muc_nuoc) VALUES (%s, %s, %s)", (nhiet_do, do_ph, muc_nuoc_pt))
+            
+            # --- LOGIC CHU TRÌNH THAY NƯỚC TỰ ĐỘNG ---
+            if cai_dat:
+                dang_thay = cai_dat.get('dang_thay_nuoc', 0)
+                if dang_thay == 1:
+                    muc_tieu_xa = cai_dat.get('muc_tieu_xa', 0.0)
+                    bom_xa = cai_dat.get('trang_thai_bom_xa', 0)
+                    bom_cap = cai_dat.get('trang_thai_bom_cap', 0)
+                    
+                    if bom_xa == 1 and (muc_nuoc_pt <= muc_tieu_xa):
+                        print("✅ Đã xả đủ nước! Chuyển sang bơm cấp.")
+                        mqtt_client.publish("hoca_test/commands", "BOMXA_OFF")
+                        mqtt_client.publish("hoca_test/commands", "BOMCAP_ON")
+                        cursor.execute("UPDATE cai_dat_ho SET trang_thai_bom_xa=0, trang_thai_bom_cap=1 WHERE id=1")
+                        conn.commit()
+                        
+                    elif bom_cap == 1 and (muc_nuoc_pt >= 95.0):
+                        print("✅ Đã cấp đầy nước! Hoàn tất chu trình thay nước.")
+                        mqtt_client.publish("hoca_test/commands", "BOMCAP_OFF")
+                        mqtt_client.publish("hoca_test/commands", "BOM_ON")
+                        cursor.execute("UPDATE cai_dat_ho SET trang_thai_bom_cap=0, dang_thay_nuoc=0 WHERE id=1")
+                        conn.commit()
+
+            # --- LOGIC CẢNH BÁO THÔNG MINH ---
             if cai_dat:
                 canh_bao_list = []
+                dang_thay = cai_dat.get('dang_thay_nuoc', 0)
                 
-                if nhiet_do > cai_dat['nhiet_do_max']: canh_bao_list.append(("Nhiệt độ", f"Nhiệt độ quá cao: {nhiet_do}°C"))
-                if nhiet_do < cai_dat['nhiet_do_min']: canh_bao_list.append(("Nhiệt độ", f"Nhiệt độ quá thấp: {nhiet_do}°C"))
-                if do_ph > cai_dat['ph_max']: canh_bao_list.append(("Độ pH", f"Độ pH quá cao: {do_ph}"))
-                if do_ph < cai_dat['ph_min']: canh_bao_list.append(("Độ pH", f"Độ pH quá thấp: {do_ph}"))
-                # Note: Nếu muc_nuoc_min chưa tồn tại trong DB cũ, giả sử lấy 30.0 nếu None
-                muc_nuoc_min = cai_dat.get('muc_nuoc_min', 30.0) 
-                if muc_nuoc < muc_nuoc_min: canh_bao_list.append(("Mực nước", f"Cạn nước! Mực nước hiện tại: {muc_nuoc}%"))
+                if nhiet_do > cai_dat['nhiet_do_max']: canh_bao_list.append(("Nhiệt độ", f"Nhiệt độ hồ quá nóng ({nhiet_do}°C > {cai_dat['nhiet_do_max']}°C). Hãy giảm nhiệt."))
+                elif nhiet_do < cai_dat['nhiet_do_min']: canh_bao_list.append(("Nhiệt độ", f"Nhiệt độ hồ quá thấp ({nhiet_do}°C < {cai_dat['nhiet_do_min']}°C). Hãy kiểm tra sưởi."))
+                
+                if do_ph > cai_dat['ph_max']: canh_bao_list.append(("Độ pH", f"Độ pH quá cao ({do_ph} > {cai_dat['ph_max']}). Môi trường kiềm cao."))
+                elif do_ph < cai_dat['ph_min']: canh_bao_list.append(("Độ pH", f"Độ pH quá thấp ({do_ph} < {cai_dat['ph_min']}). Môi trường bị axit."))
+                
+                w_min = float(cai_dat.get('muc_nuoc_min', 30.0))
+                if muc_nuoc_pt < w_min and dang_thay == 0: 
+                    canh_bao_list.append(("Mực nước", f"Cảnh báo: Mực nước bốc hơi hụt quá ngưỡng an toàn ({muc_nuoc_pt:.0f}% < {w_min}%). Cần châm bù nước ngay!"))
                 
                 if len(canh_bao_list) > 0:
-                    # Ghi nhận vào Lịch sử cảnh báo
+                    # Chống Spam CSDL: Lấy lịch sử 10 cảnh báo gần nhất trong 1 tiếng qua
+                    cursor.execute("SELECT loai_canh_bao FROM lich_su_canh_bao WHERE thoi_gian_tao >= NOW() - INTERVAL 1 HOUR ORDER BY id DESC LIMIT 10")
+                    cac_loai_da_canh_bao = [row['loai_canh_bao'] for row in cursor.fetchall()]
+                    
                     for cb in canh_bao_list:
-                        cursor.execute("INSERT INTO lich_su_canh_bao (loai_canh_bao, noi_dung) VALUES (%s, %s)", (cb[0], cb[1]))
+                        # Chỉ ghi DB nếu loại cảnh báo này chưa có trong 1 tiếng qua
+                        if cb[0] not in cac_loai_da_canh_bao:
+                            cursor.execute("INSERT INTO lich_su_canh_bao (loai_canh_bao, noi_dung) VALUES (%s, %s)", (cb[0], cb[1]))
+                            
                     # Bắn còi MQTT
-                    print("🚨 CÓ CẢNH BÁO! Đang rú còi...")
+                    print("🚨 CÓ CẢNH BÁO MÔI TRƯỜNG! Đang rú còi...")
                     mqtt_client.publish("hoca_test/commands", "ALARM_ON")
                 else:
                     # An toàn, tắt còi nếu đang kêu
@@ -499,6 +714,16 @@ def on_message(client, userdata, msg):
 mqtt_client.on_connect = on_connect
 mqtt_client.on_message = on_message
 
+def is_in_time_range(start_str, end_str, current_str):
+    if not start_str or not end_str: return False
+    s = int(start_str.replace(":", ""))
+    e = int(end_str.replace(":", ""))
+    c = int(current_str.replace(":", ""))
+    if s <= e:
+        return s <= c < e
+    else: # Qua nửa đêm
+        return c >= s or c < e
+
 # 2. Vòng lặp Hẹn giờ tự động (Chạy mỗi 1 phút)
 def kiem_tra_hen_gio():
     conn = lay_ket_noi()
@@ -506,40 +731,120 @@ def kiem_tra_hen_gio():
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM cai_dat_ho WHERE id = 1")
     cai_dat = cursor.fetchone()
-    cursor.close()
-    conn.close()
+    cursor.close(); conn.close()
     
     if not cai_dat: return
     
     gio_hien_tai = datetime.datetime.now().strftime("%H:%M")
     
+    thu_hien_tai = str(datetime.datetime.now().weekday() + 2)
+    if datetime.datetime.now().weekday() == 6: thu_hien_tai = "8" # Chủ nhật
+
     # Kiểm tra hẹn giờ đèn
-    if cai_dat['che_do_den'] == 'timer':
-        gio_bat_den = str(cai_dat['hen_gio_den_bat'])[:5] # Lấy HH:MM
-        gio_tat_den = str(cai_dat['hen_gio_den_tat'])[:5]
-        
-        if gio_hien_tai == gio_bat_den:
-            print("⏰ Đã tới giờ BẬT ĐÈN! Gửi lệnh MQTT...")
+    if cai_dat['che_do_den'] == 'auto_sensor':
+        phut = datetime.datetime.now().hour * 60 + datetime.datetime.now().minute
+        # 17h30 = 1050, 6h00 = 360
+        phai_bat_den = (phut >= 1050 or phut < 360)
+        if phai_bat_den and not cai_dat['trang_thai_den']:
+            print("⏰ [Đèn] Đang trong khung giờ Auto (17h30-06h) -> BẬT!")
             mqtt_client.publish("hoca_test/commands", "DEN_ON")
-        elif gio_hien_tai == gio_tat_den:
-            print("⏰ Đã tới giờ TẮT ĐÈN! Gửi lệnh MQTT...")
+        elif not phai_bat_den and cai_dat['trang_thai_den']:
+            print("⏰ [Đèn] Ngoài khung giờ Auto (17h30-06h) -> TẮT!")
             mqtt_client.publish("hoca_test/commands", "DEN_OFF")
+
+    elif cai_dat['che_do_den'] == 'timer':
+        lich_thu = str(cai_dat.get('lich_den_thu', '2,3,4,5,6,7,8'))
+        if thu_hien_tai in lich_thu:
+            cac_moc_bat = str(cai_dat.get('hen_gio_den_bat', '')).split(',')
+            cac_moc_tat = str(cai_dat.get('hen_gio_den_tat', '')).split(',')
+            
+            phai_bat_den = False
+            for i in range(len(cac_moc_bat)):
+                if i < len(cac_moc_tat) and cac_moc_bat[i] and cac_moc_tat[i]:
+                    if is_in_time_range(cac_moc_bat[i][:5], cac_moc_tat[i][:5], gio_hien_tai):
+                        phai_bat_den = True
+                        break
+            
+            if phai_bat_den and not cai_dat['trang_thai_den']:
+                print(f"⏰ [Đèn] Đang trong mốc giờ hẹn -> BẬT!")
+                mqtt_client.publish("hoca_test/commands", "DEN_ON")
+            elif not phai_bat_den and cai_dat['trang_thai_den']:
+                print(f"⏰ [Đèn] Ngoài các mốc giờ hẹn -> TẮT!")
+                mqtt_client.publish("hoca_test/commands", "DEN_OFF")
             
     # Kiểm tra hẹn giờ Bơm
     if cai_dat['che_do_bom'] == 'timer':
-        gio_bat_bom = str(cai_dat['hen_gio_bom_bat'])[:5]
-        gio_tat_bom = str(cai_dat['hen_gio_bom_tat'])[:5]
+        lich_thu = str(cai_dat.get('lich_bom_thu', '2,3,4,5,6,7,8'))
+        if thu_hien_tai in lich_thu:
+            cac_moc_bat = str(cai_dat.get('hen_gio_bom_bat', '')).split(',')
+            cac_moc_tat = str(cai_dat.get('hen_gio_bom_tat', '')).split(',')
+            
+            phai_bat_bom = False
+            for i in range(len(cac_moc_bat)):
+                if i < len(cac_moc_tat) and cac_moc_bat[i] and cac_moc_tat[i]:
+                    if is_in_time_range(cac_moc_bat[i][:5], cac_moc_tat[i][:5], gio_hien_tai):
+                        phai_bat_bom = True
+                        break
+            
+            if phai_bat_bom and not cai_dat['trang_thai_bom']:
+                print(f"⏰ [Bơm] Đang trong mốc giờ hẹn -> BẬT!")
+                mqtt_client.publish("hoca_test/commands", "BOM_ON")
+            elif not phai_bat_bom and cai_dat['trang_thai_bom']:
+                print(f"⏰ [Bơm] Ngoài các mốc giờ hẹn -> TẮT!")
+                mqtt_client.publish("hoca_test/commands", "BOM_OFF")
+            
+    # Kiểm tra Thay nước Tự động
+    thu_hien_tai = str(datetime.datetime.now().weekday() + 2) # 0=Monday -> Thu 2
+    
+    lich_thu = str(cai_dat.get('lich_thay_nuoc_thu', ''))
+    lich_gio = str(cai_dat.get('lich_thay_nuoc_gio', ''))[:5] if cai_dat.get('lich_thay_nuoc_gio') else ''
+    phan_tram_thay = float(cai_dat.get('phan_tram_thay', 0))
+    dang_thay = cai_dat.get('dang_thay_nuoc', 0)
+    
+    if (dang_thay == 0) and (phan_tram_thay > 0) and (thu_hien_tai in lich_thu) and (gio_hien_tai == lich_gio):
+        print(f"⏰ ĐẾN GIỜ THAY NƯỚC TỰ ĐỘNG! Sẽ xả {phan_tram_thay}% nước.")
         
-        if gio_hien_tai == gio_bat_bom:
-            print("⏰ Đã tới giờ BẬT BƠM! Gửi lệnh MQTT...")
-            mqtt_client.publish("hoca_test/commands", "BOM_ON")
-        elif gio_hien_tai == gio_tat_bom:
-            print("⏰ Đã tới giờ TẮT BƠM! Gửi lệnh MQTT...")
-            mqtt_client.publish("hoca_test/commands", "BOM_OFF")
+        cursor.execute("SELECT muc_nuoc FROM du_lieu_cam_bien ORDER BY id DESC LIMIT 1")
+        cb = cursor.fetchone()
+        muc_nuoc_hien_tai = cb['muc_nuoc'] if cb else 100.0
+        
+        muc_tieu = max(0.0, float(muc_nuoc_hien_tai) - phan_tram_thay)
+        cursor.execute("UPDATE cai_dat_ho SET dang_thay_nuoc=1, muc_tieu_xa=%s WHERE id=1", (muc_tieu,))
+        conn.commit()
+        
+        mqtt_client.publish("hoca_test/commands", "BOM_OFF") # Tắt máy lọc
+        mqtt_client.publish("hoca_test/commands", "BOMXA_ON") # Bật bơm xả
 
 # Khởi động MQTT và Scheduler khi ứng dụng chạy
 @app.on_event("startup")
 def startup_event():
+    # Tự động cập nhật Database nếu thiếu cột
+    conn = lay_ket_noi()
+    if conn:
+        cursor = conn.cursor()
+        queries = [
+            "ALTER TABLE cai_dat_ho ADD COLUMN sieu_am_day FLOAT DEFAULT 21.0",
+            "ALTER TABLE cai_dat_ho ADD COLUMN sieu_am_tran FLOAT DEFAULT 3.0",
+            "ALTER TABLE cai_dat_ho ADD COLUMN lich_thay_nuoc_thu VARCHAR(50) DEFAULT ''",
+            "ALTER TABLE cai_dat_ho ADD COLUMN lich_thay_nuoc_gio TIME DEFAULT NULL",
+            "ALTER TABLE cai_dat_ho ADD COLUMN phan_tram_thay FLOAT DEFAULT 0.0",
+            "ALTER TABLE cai_dat_ho ADD COLUMN trang_thai_bom_xa BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE cai_dat_ho ADD COLUMN trang_thai_bom_cap BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE cai_dat_ho ADD COLUMN dang_thay_nuoc BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE cai_dat_ho ADD COLUMN muc_tieu_xa FLOAT DEFAULT 0.0",
+            "ALTER TABLE cai_dat_ho ADD COLUMN lich_den_thu VARCHAR(50) DEFAULT '2,3,4,5,6,7,8'",
+            "ALTER TABLE cai_dat_ho ADD COLUMN lich_bom_thu VARCHAR(50) DEFAULT '2,3,4,5,6,7,8'",
+            "ALTER TABLE cai_dat_ho MODIFY COLUMN hen_gio_den_bat VARCHAR(50)",
+            "ALTER TABLE cai_dat_ho MODIFY COLUMN hen_gio_den_tat VARCHAR(50)",
+            "ALTER TABLE cai_dat_ho MODIFY COLUMN hen_gio_bom_bat VARCHAR(50)",
+            "ALTER TABLE cai_dat_ho MODIFY COLUMN hen_gio_bom_tat VARCHAR(50)"
+        ]
+        for q in queries:
+            try: cursor.execute(q)
+            except: pass
+        conn.commit()
+        cursor.close(); conn.close()
+
     # Bật MQTT kết nối ngầm
     mqtt_client.connect("broker.emqx.io", 1883, 60)
     mqtt_client.loop_start()

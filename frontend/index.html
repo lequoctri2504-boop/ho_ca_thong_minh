@@ -30,17 +30,26 @@
                     <p>Dữ liệu cập nhật liên tục từ cảm biến ESP32</p>
                 </div>
                 
+                <!-- KHUNG HIỂN THỊ CẢNH BÁO MÔI TRƯỜNG -->
+                <div id="system-alerts" style="margin-bottom: 20px;"></div>
+                
                 <div class="sensor-cards">
                     <div class="card glass-panel temp-card">
                         <i class="fa-solid fa-temperature-half icon-large text-orange"></i>
                         <div class="info">
-                            <h3>Nhiệt độ nước</h3><p id="current-temp">27.0 °C</p>
+                            <h3>Nhiệt độ nước</h3><p id="current-temp">-- °C</p>
                         </div>
                     </div>
                     <div class="card glass-panel ph-card">
                         <i class="fa-solid fa-flask icon-large text-blue"></i>
                         <div class="info">
-                            <h3>Độ pH</h3><p id="current-ph">7.2</p>
+                            <h3>Độ pH</h3><p id="current-ph">--</p>
+                        </div>
+                    </div>
+                    <div class="card glass-panel water-card">
+                        <i class="fa-solid fa-water icon-large text-primary"></i>
+                        <div class="info">
+                            <h3>Mực nước</h3><p id="current-water">-- %</p>
                         </div>
                     </div>
                 </div>
@@ -55,7 +64,17 @@
                             <option value="3">3 ngày trước</option>
                         </select>
                     </div>
-                    <canvas id="envChart"></canvas>
+                    <div style="display: grid; grid-template-columns: 1fr; gap: 20px;">
+                        <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 15px; position: relative;">
+                            <canvas id="waterChart" height="250"></canvas>
+                        </div>
+                        <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 15px; position: relative;">
+                            <canvas id="tempChart" height="250"></canvas>
+                        </div>
+                        <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 15px; position: relative;">
+                            <canvas id="phChart" height="250"></canvas>
+                        </div>
+                    </div>
                 </div>
             </section>
 
@@ -249,91 +268,182 @@
                 <form id="settings-form">
                     <div class="control-grid mb-3">
                         
-                        <!-- CÀI ĐẶT MÔI TRƯỜNG & CẢM BIẾN -->
+                        <!-- KHUNG 1: ĐIỀU KHIỂN & HẸN GIỜ THIẾT BỊ -->
                         <div class="control-card glass-panel" style="text-align: left;">
-                            <h3><i class="fa-solid fa-gear text-primary"></i> Môi trường & Cảm biến</h3>
+                            <div class="control-header" style="text-align: center; margin-bottom: 10px;">
+                                <i class="fa-solid fa-gamepad icon-large text-green"></i>
+                                <h3>Điều Khiển & Hẹn Giờ</h3>
+                            </div>
+                            
+                            <!-- ĐÈN -->
+                            <div style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+                                <div style="display:flex; justify-content: space-between; align-items: center;">
+                                    <div><h4 class="text-yellow"><i class="fa-regular fa-lightbulb"></i> Đèn Chiếu Sáng</h4><p id="light-status" class="status-text">Đang tắt</p></div>
+                                    <div id="den-manual-toggle"><label class="toggle-switch"><input type="checkbox" id="light-toggle"><span class="slider"></span></label></div>
+                                </div>
+                                <div class="mt-2">
+                                    <label>Chế độ:</label>
+                                    <select id="set-che-do-den" class="glass-input" style="width: 100%; padding: 5px;">
+                                        <option value="manual">Thủ công (Bật/Tắt bằng nút gạt)</option>
+                                        <option value="auto_sensor">Auto (Bật lúc 17h30 - Tắt lúc 6h00)</option>
+                                        <option value="timer">Hẹn giờ tuỳ chỉnh</option>
+                                    </select>
+                                </div>
+                                <div id="den-timer-group" class="hidden mt-2">
+                                    <div style="display:flex; gap:10px; margin-bottom:5px;">
+                                        <div style="flex:1;"><label>Mốc 1 - Bật:</label><input type="time" id="set-den-bat-1" class="glass-input" style="width: 100%;"></div>
+                                        <div style="flex:1;"><label>Tắt lúc:</label><input type="time" id="set-den-tat-1" class="glass-input" style="width: 100%;"></div>
+                                    </div>
+                                    <div style="display:flex; gap:10px; margin-bottom:5px;">
+                                        <div style="flex:1;"><label>Mốc 2 - Bật:</label><input type="time" id="set-den-bat-2" class="glass-input" style="width: 100%;"></div>
+                                        <div style="flex:1;"><label>Tắt lúc:</label><input type="time" id="set-den-tat-2" class="glass-input" style="width: 100%;"></div>
+                                    </div>
+                                    <div style="display:flex; gap:10px; margin-bottom:5px;">
+                                        <div style="flex:1;"><label>Mốc 3 - Bật:</label><input type="time" id="set-den-bat-3" class="glass-input" style="width: 100%;"></div>
+                                        <div style="flex:1;"><label>Tắt lúc:</label><input type="time" id="set-den-tat-3" class="glass-input" style="width: 100%;"></div>
+                                    </div>
+                                    <div class="mt-2">
+                                        <label>Lặp lại vào các Thứ:</label>
+                                        <input type="text" id="set-den-thu" class="glass-input" style="width: 100%;" placeholder="VD: 2,3,4,5,6,7,8">
+                                    </div>
+                                </div>
+                            </div>
+                        
+                            <!-- MÁY LỌC -->
+                            <div style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+                                <div style="display:flex; justify-content: space-between; align-items: center;">
+                                    <div><h4 class="text-blue"><i class="fa-solid fa-fan"></i> Máy Bơm Lọc/Oxy</h4><p id="pump-status" class="status-text">Đang tắt</p></div>
+                                    <div id="bom-manual-toggle"><label class="toggle-switch"><input type="checkbox" id="pump-toggle"><span class="slider"></span></label></div>
+                                </div>
+                                <div class="mt-2">
+                                    <label>Chế độ:</label>
+                                    <select id="set-che-do-bom" class="glass-input" style="width: 100%; padding: 5px;">
+                                        <option value="manual">Thủ công (Bật/Tắt bằng nút gạt)</option>
+                                        <option value="timer">Hẹn giờ (Chạy luân phiên)</option>
+                                    </select>
+                                </div>
+                                <div id="bom-timer-group" class="hidden mt-2">
+                                    <div style="display:flex; gap:10px; margin-bottom:5px;">
+                                        <div style="flex:1;"><label>Mốc 1 - Bật:</label><input type="time" id="set-bom-bat-1" class="glass-input" style="width: 100%;"></div>
+                                        <div style="flex:1;"><label>Tắt lúc:</label><input type="time" id="set-bom-tat-1" class="glass-input" style="width: 100%;"></div>
+                                    </div>
+                                    <div style="display:flex; gap:10px; margin-bottom:5px;">
+                                        <div style="flex:1;"><label>Mốc 2 - Bật:</label><input type="time" id="set-bom-bat-2" class="glass-input" style="width: 100%;"></div>
+                                        <div style="flex:1;"><label>Tắt lúc:</label><input type="time" id="set-bom-tat-2" class="glass-input" style="width: 100%;"></div>
+                                    </div>
+                                    <div style="display:flex; gap:10px; margin-bottom:5px;">
+                                        <div style="flex:1;"><label>Mốc 3 - Bật:</label><input type="time" id="set-bom-bat-3" class="glass-input" style="width: 100%;"></div>
+                                        <div style="flex:1;"><label>Tắt lúc:</label><input type="time" id="set-bom-tat-3" class="glass-input" style="width: 100%;"></div>
+                                    </div>
+                                    <div class="mt-2">
+                                        <label>Lặp lại vào các Thứ:</label>
+                                        <input type="text" id="set-bom-thu" class="glass-input" style="width: 100%;" placeholder="VD: 2,3,4,5,6,7,8">
+                                    </div>
+                                </div>
+                            </div>
+                        
+                            <!-- BƠM XẢ & CẤP & RELAY 5 -->
+                            <div style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+                                <h4 class="text-primary" style="margin-bottom: 10px;"><i class="fa-solid fa-water"></i> Bơm Thay Nước & Dự Phòng 5</h4>
+                                <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                    <div><span style="font-weight: bold;">Bơm Xả (Hút ra)</span><br><span id="bomxa-status" class="status-text text-red" style="font-size: 0.8rem;">Đang tắt</span></div>
+                                    <label class="toggle-switch"><input type="checkbox" id="bomxa-toggle"><span class="slider"></span></label>
+                                </div>
+                                <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                    <div><span style="font-weight: bold;">Bơm Cấp (Bơm vào)</span><br><span id="bomcap-status" class="status-text text-blue" style="font-size: 0.8rem;">Đang tắt</span></div>
+                                    <label class="toggle-switch"><input type="checkbox" id="bomcap-toggle"><span class="slider"></span></label>
+                                </div>
+                                <div style="display:flex; justify-content: space-between; align-items: center;">
+                                    <div><span style="font-weight: bold;">Thiết bị 5 (Tuỳ chọn)</span><br><span id="relay5-status" class="status-text text-yellow" style="font-size: 0.8rem;">Đang tắt</span></div>
+                                    <label class="toggle-switch"><input type="checkbox" id="relay5-toggle"><span class="slider"></span></label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- KHUNG 2: CẤU HÌNH CẢM BIẾN & MÔI TRƯỜNG -->
+                        <div class="control-card glass-panel" style="text-align: left;">
+                            <div class="control-header" style="text-align: center; margin-bottom: 10px;">
+                                <i class="fa-solid fa-sliders icon-large text-orange"></i>
+                                <h3>Cấu Hình Môi Trường & Cảm Biến</h3>
+                            </div>
+                            
                             <div class="mt-3">
                                 <label>Ngưỡng Nhiệt độ an toàn (°C)</label><br>
-                                <input type="number" id="set-temp-min" class="glass-input" style="width:45%" step="0.1"> - 
-                                <input type="number" id="set-temp-max" class="glass-input" style="width:45%" step="0.1">
+                                <div style="display:flex; gap:10px;">
+                                    <input type="number" id="set-temp-min" class="glass-input" style="width:100%" step="0.1">
+                                    <input type="number" id="set-temp-max" class="glass-input" style="width:100%" step="0.1">
+                                </div>
                             </div>
                             <div class="mt-3">
                                 <label>Ngưỡng Độ pH an toàn</label><br>
-                                <input type="number" id="set-ph-min" class="glass-input" style="width:45%" step="0.1"> - 
-                                <input type="number" id="set-ph-max" class="glass-input" style="width:45%" step="0.1">
+                                <div style="display:flex; gap:10px;">
+                                    <input type="number" id="set-ph-min" class="glass-input" style="width:100%" step="0.1">
+                                    <input type="number" id="set-ph-max" class="glass-input" style="width:100%" step="0.1">
+                                </div>
                             </div>
                             <div class="mt-3">
-                                <label>Cảnh báo cạn nước (%)</label><br>
-                                <input type="number" id="set-water-min" class="glass-input" style="width:100%" placeholder="Ví dụ: 30" step="1">
-                                <p style="font-size: 0.8rem; color: #f87171; margin-top: 5px;">* Hệ thống sẽ rú còi nếu nước dưới mức này.</p>
+                                <label>Cảnh báo Cạn Nước (%)</label><br>
+                                <input type="number" id="set-water-min" class="glass-input" style="width:100%">
                             </div>
+
+                            <hr style="border-color: rgba(255,255,255,0.1); margin: 15px 0;">
+                            
+                            <h4 class="text-primary" style="font-size: 0.9rem;">Toạ độ Cảm biến Siêu âm</h4>
+                            <div style="display:flex; gap:10px; margin-top: 5px;">
+                                <div style="flex:1;">
+                                    <label>Chiều cao lắp Cảm biến (cm)</label><br>
+                                    <input type="number" id="set-sieu-am-day" class="glass-input" style="width:100%" step="0.1" value="45">
+                                    <p style="font-size: 0.75rem; color: #94a3b8; margin-top:3px;">*Từ mắt cảm biến xuống sát ĐÁY</p>
+                                </div>
+                                <div style="flex:1;">
+                                    <label>Mực nước Max mong muốn (cm)</label><br>
+                                    <input type="number" id="set-sieu-am-tran" class="glass-input" style="width:100%" step="0.1" value="38">
+                                    <small class="text-gray" style="font-size:0.75rem; display:block; margin-top:3px;">Không vượt quá: Chiều cao hồ - 2cm</small>
+                                    <p style="font-size: 0.75rem; color: #f59e0b; margin-top:3px;">*Tối đa = Chiều cao hồ - 2cm</p>
+                                </div>
+                            </div>
+                            
                             <div class="mt-3">
                                 <label>Tần suất gửi dữ liệu (giây)</label><br>
-                                <input type="number" id="set-chu-ky" class="glass-input" style="width:100%" placeholder="Ví dụ: 60">
+                                <input type="number" id="set-chu-ky" class="glass-input" style="width:100%" value="60">
                             </div>
                         </div>
 
-                        <!-- ĐIỀU KHIỂN ĐÈN -->
+                        <!-- KHUNG 3: HỆ THỐNG THAY NƯỚC -->
                         <div class="control-card glass-panel" style="text-align: left;">
                             <div class="control-header" style="text-align: center; margin-bottom: 10px;">
-                                <i class="fa-regular fa-lightbulb icon-large text-yellow"></i>
-                                <h3>Đèn chiếu sáng</h3>
+                                <i class="fa-solid fa-droplet icon-large text-blue"></i>
+                                <h3>Hệ Thống Thay Nước</h3>
                             </div>
                             
-                            <label>Chế độ hoạt động:</label>
-                            <select id="set-che-do-den" class="glass-input" style="width: 100%; margin-bottom: 15px;">
-                                <option value="manual">Thủ công (Bật/Tắt tay)</option>
-                                <option value="auto_sensor">Auto (Tự bật khi trời tối)</option>
-                                <option value="timer">Hẹn giờ</option>
-                            </select>
-                            
-                            <!-- Bật tắt thủ công -->
-                            <div id="den-manual-group" style="text-align: center;">
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="light-toggle">
-                                    <span class="slider"></span>
-                                </label>
-                                <p class="status-text mt-3">Trạng thái: <span id="light-status">Đang tắt</span></p>
+                            <h4 class="mt-3 text-yellow" style="font-size: 0.95rem;">1. Thay Nước Tự Động (Lịch)</h4>
+                            <div class="mt-2">
+                                <label>Lượng nước thay (%)</label><br>
+                                <input type="number" id="set-phan-tram-thay" class="glass-input" style="width:100%" placeholder="Ví dụ: 30" step="1">
                             </div>
-                            
-                            <!-- Hẹn giờ -->
-                            <div id="den-timer-group" class="hidden">
-                                <label>Giờ bật:</label>
-                                <input type="time" id="set-den-bat" class="glass-input" style="width: 100%; margin-bottom: 10px;">
-                                <label>Giờ tắt:</label>
-                                <input type="time" id="set-den-tat" class="glass-input" style="width: 100%;">
+                            <div style="display:flex; gap:10px; margin-top: 10px;">
+                                <div style="flex:1;">
+                                    <label>Giờ kích hoạt</label><br>
+                                    <input type="time" id="set-lich-gio" class="glass-input" style="width:100%">
+                                </div>
+                                <div style="flex:1;">
+                                    <label>Ngày (Thứ)</label><br>
+                                    <input type="text" id="set-lich-thu" class="glass-input" style="width:100%" placeholder="2,4,6 hoặc 8">
+                                </div>
                             </div>
-                        </div>
-
-                        <!-- ĐIỀU KHIỂN BƠM/OXY -->
-                        <div class="control-card glass-panel" style="text-align: left;">
-                            <div class="control-header" style="text-align: center; margin-bottom: 10px;">
-                                <i class="fa-solid fa-fan icon-large text-blue"></i>
-                                <h3>Bơm Lọc & Sục Oxy</h3>
-                            </div>
+                            <p style="font-size: 0.8rem; color: #94a3b8; margin-top: 5px;">*2: Thứ 2 | 8: Chủ nhật. Nhập các ngày cách nhau bằng dấu phẩy.</p>
                             
-                            <label>Chế độ hoạt động:</label>
-                            <select id="set-che-do-bom" class="glass-input" style="width: 100%; margin-bottom: 15px;">
-                                <option value="manual">Thủ công (Bật/Tắt tay)</option>
-                                <option value="timer">Hẹn giờ (Chạy luân phiên)</option>
-                            </select>
+                            <hr style="border-color: rgba(255,255,255,0.1); margin: 20px 0;">
                             
-                            <!-- Bật tắt thủ công -->
-                            <div id="bom-manual-group" style="text-align: center;">
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="pump-toggle">
-                                    <span class="slider"></span>
-                                </label>
-                                <p class="status-text mt-3">Trạng thái: <span id="pump-status">Đang tắt</span></p>
+                            <h4 class="text-green" style="font-size: 0.95rem;">2. Thay Nước Ngay (Thủ Công)</h4>
+                            <div style="display:flex; gap:10px; align-items: flex-end; margin-top: 10px;">
+                                <div style="flex:1;">
+                                    <label>Lượng nước cần rút (%)</label><br>
+                                    <input type="number" id="quick-water-percent" class="glass-input" style="width:100%" placeholder="Ví dụ: 20" step="1" value="20">
+                                </div>
+                                <button type="button" id="btn-quick-water" class="btn-gradient" style="padding: 10px 15px; font-size: 0.9rem;">BẮT ĐẦU THAY</button>
                             </div>
-                            
-                            <!-- Hẹn giờ -->
-                            <div id="bom-timer-group" class="hidden">
-                                <label>Giờ bật:</label>
-                                <input type="time" id="set-bom-bat" class="glass-input" style="width: 100%; margin-bottom: 10px;">
-                                <label>Giờ tắt:</label>
-                                <input type="time" id="set-bom-tat" class="glass-input" style="width: 100%;">
-                            </div>
+                            <p id="quick-water-status" class="mt-3 text-orange hidden" style="font-size: 0.85rem; font-weight: bold;"><i class="fa-solid fa-spinner fa-spin"></i> Đang chạy chu trình thay nước...</p>
                         </div>
 
                     </div>
@@ -429,6 +539,6 @@
         <option value="Cá Chép Koi">
     </datalist>
 
-    <script src="script.js"></script>
+    <script src="script.js?v=4"></script>
 </body>
 </html>

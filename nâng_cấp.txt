@@ -1,0 +1,32 @@
+1. Phân tích 4 Quy trình Nghiệp vụ (Business Processes) cốt lõi hiện có:
+Nghiệp vụ 1: Quy trình Giám sát & Cảnh báo an toàn sinh thái
+
+Không phải: Chỉ đo nhiệt độ rồi hiện lên Web.
+Nghiệp vụ là: ESP32 liên tục đẩy dữ liệu về. Backend Python nhận dữ liệu, đối chiếu với bảng cai_dat_ho (Ngưỡng an toàn do người dùng thiết lập). Nếu vượt ngưỡng, hệ thống kích hoạt Nghiệp vụ Cảnh báo: Ghi lỗi vào bảng lich_su_canh_bao và đẩy thông báo khẩn cấp (màu đỏ) lên giao diện người dùng để xử lý kịp thời.
+Nghiệp vụ 2: Quy trình Tư vấn Khả thi Nuôi cá (AI & Chuyên gia) (Đây là nghiệp vụ ăn tiền nhất)
+
+Quy trình: Khi người dùng muốn thả cá mới (Bằng cách tải ảnh AI nhận diện hoặc chọn tay), hệ thống thực hiện một chuỗi nghiệp vụ logic:
+Trích xuất đặc tính sinh học của cá từ DB loai_ca (pH phù hợp, Nhiệt độ, Tính cách, Thể tích yêu cầu/con).
+Thu thập môi trường thực tế hiện tại từ cảm biến.
+Thu thập kích thước hồ để tính toán Tổng thể tích (Lít nước).
+Quét danh sách ca_dang_nuoi trong hồ xem có xảy ra "xung đột tính cách" (ví dụ cá dữ ăn thịt cá hiền) không.
+Tính toán xem hồ còn đủ không gian sinh tồn (mật độ) cho đàn cá mới không.
+Kết quả: Hệ thống ra quyết định "Tư vấn" (Cho phép thả, Cảnh báo nguy hiểm, hoặc Cấm thả).
+Nghiệp vụ 3: Quy trình Quản lý Thiết bị Đồng bộ Đa kênh
+
+Nghiệp vụ là: Đảm bảo trạng thái thiết bị luôn đồng nhất dù thao tác từ bất cứ đâu. Khi người dùng bấm Nút vật lý tại hồ -> ESP32 xử lý (chống dội phím) -> Báo về MQTT -> Python cập nhật DB -> Web UI tự động thay đổi trạng thái (chỉ trong 300ms). Tránh hoàn toàn việc "Web báo tắt nhưng bơm đang chạy".
+Nghiệp vụ 4: Quy trình Quản trị & Lưu trữ Lịch sử (Data Logging)
+
+Hệ thống không vứt bỏ dữ liệu cũ. Nghiệp vụ yêu cầu tổng hợp dữ liệu (Tính trung bình AVG theo từng giờ) để vẽ biểu đồ xu hướng 24h. Giúp người dùng phân tích được chu kỳ biến thiên (ví dụ: Buổi trưa nước nóng lên bao nhiêu độ, ban đêm giảm bao nhiêu).
+2. Tính Mở rộng Quy trình (Scalability & Extensibility) để báo cáo với thầy:
+Thầy hỏi code của bạn có tính mở rộng để nâng cấp tính năng không? Bạn hãy tự tin trả lời là CÓ, và chứng minh qua 3 yếu tố kiến trúc:
+
+Kiến trúc Cơ sở dữ liệu chuẩn hóa (Relational DB): Bạn đã tách bạch rõ ràng loai_ca (Từ điển) và ca_dang_nuoi (Thực tế).
+
+Mở rộng: Muốn thêm tính năng "Gợi ý thức ăn", chỉ cần thêm cột loai_thuc_an vào bảng loai_ca mà không phá vỡ logic cũ. Muốn hỗ trợ quản lý nhiều hồ cá khác nhau cùng lúc, chỉ cần thêm cột id_ho vào các bảng.
+Kiến trúc Tách biệt (Decoupled Architecture): Bạn dùng MQTT làm trạm trung chuyển. ESP32 không nói chuyện trực tiếp với Web, mà thông qua Python Backend.
+
+Mở rộng: Tương lai, nếu muốn thêm Nghiệp vụ "Gửi tin nhắn Zalo/Telegram khi nhiệt độ quá cao", bạn CHỈ CẦN viết thêm 1 hàm nhỏ ở Python Backend (lắng nghe MQTT) mà không cần chạm một ngón tay nào vào code C++ của con ESP32 hay file HTML/JS của frontend.
+Tính mở rộng của AI: Flow AI hiện tại nhận diện ảnh cá -> Trả về ID cá.
+
+Mở rộng: Chỗ này là một module độc lập. Tương lai có thể nâng cấp AI thành "Nhận diện bệnh của cá qua camera", tái sử dụng lại toàn bộ luồng đẩy ảnh lên server hiện có.

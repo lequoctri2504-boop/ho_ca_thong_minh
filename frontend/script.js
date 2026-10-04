@@ -165,71 +165,110 @@ function renderTuVan(chi_tiet, loi_khuyen_tong_the) {
 }
 
 // ---- LOGIC BIỂU ĐỒ TỔNG QUAN ----
-const ctx = document.getElementById('envChart').getContext('2d');
-let envChart;
+// ---- LOGIC BIỂU ĐỒ TỔNG QUAN ----
+let waterChart, tempChart, phChart;
+
 async function renderChart(ngay = 0) {
     try {
         const res = await fetch(`http://localhost:8000/api/bieu_do?ngay=${ngay}`);
         if (!res.ok) return;
         const du_lieu = await res.json();
         
-        // Chuẩn bị mảng dữ liệu rỗng
-        const labels = [];
-        const temp_data = [];
-        const ph_data = [];
-        const water_data = [];
-        
-        // Nhồi data từ DB vào mảng
-        du_lieu.forEach(item => {
-            labels.push(item.gio);
-            temp_data.push(item.nhiet_do_tb.toFixed(1));
-            ph_data.push(item.do_ph_tb.toFixed(1));
-            water_data.push(item.muc_nuoc_tb.toFixed(1));
-        });
-
-        if (envChart) {
-            envChart.destroy(); // Hủy chart cũ trước khi vẽ lại chart mới
+        // Chuẩn bị mảng nhãn 24 giờ (Hiển thị số thẳng thừng từ 0 đến 23)
+        const xLabels = [];
+        for (let i = 0; i < 24; i++) {
+            xLabels.push(i.toString());
         }
+
+        // Chuẩn bị mảng dữ liệu trống (24 phần tử rỗng)
+        const temp_data = new Array(24).fill(null);
+        const ph_data = new Array(24).fill(null);
+        const water_data = new Array(24).fill(null);
         
-        envChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels.length > 0 ? labels : ['Chưa có dữ liệu'],
-                datasets: [
-                    {
-                        label: 'Nhiệt độ (°C)',
-                        data: temp_data.length > 0 ? temp_data : [0],
-                        borderColor: '#fbbf24',
-                        tension: 0.4,
-                        yAxisID: 'y'
-                    },
-                    {
-                        label: 'Độ pH',
-                        data: ph_data.length > 0 ? ph_data : [0],
-                        borderColor: '#38bdf8',
-                        tension: 0.4,
-                        yAxisID: 'y1'
-                    },
-                    {
-                        label: 'Mực nước (%)',
-                        data: water_data.length > 0 ? water_data : [0],
-                        borderColor: '#a78bfa',
-                        borderDash: [5, 5],
-                        tension: 0.4,
-                        yAxisID: 'y2'
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: { type: 'linear', display: true, position: 'left', title: {display: true, text: 'Nhiệt độ'} },
-                    y1: { type: 'linear', display: true, position: 'right', title: {display: true, text: 'pH'}, grid: { drawOnChartArea: false } },
-                    y2: { type: 'linear', display: false, position: 'right', min: 0, max: 100 }
-                }
+        // Nhồi data từ DB vào mảng dựa trên đúng mốc giờ
+        du_lieu.forEach(item => {
+            const hour = parseInt(item.gio.split(":")[0]); // Lấy giờ từ chuỗi "14:00"
+            if (hour >= 0 && hour < 24) {
+                temp_data[hour] = item.nhiet_do_tb.toFixed(1);
+                ph_data[hour] = item.do_ph_tb.toFixed(1);
+                water_data[hour] = item.muc_nuoc_tb.toFixed(1);
             }
         });
+
+        const commonOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { 
+                    title: { display: true, text: 'Thời gian (Giờ)', color: '#94a3b8', font: {size: 13, weight: 'bold'} },
+                    ticks: { color: '#cbd5e1', autoSkip: false, maxRotation: 0 }, 
+                    grid: { color: 'rgba(255,255,255,0.1)' } 
+                },
+                y: { 
+                    ticks: { color: '#cbd5e1' }, 
+                    grid: { color: 'rgba(255,255,255,0.1)' } 
+                }
+            }
+        };
+
+        // 1. Biểu đồ Mực Nước
+        if (waterChart) waterChart.destroy();
+        const ctxWater = document.getElementById('waterChart').getContext('2d');
+        waterChart = new Chart(ctxWater, {
+            type: 'line',
+            data: {
+                labels: xLabels,
+                datasets: [{ label: 'Mực nước (%)', data: water_data.length > 0 ? water_data : [0], borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.2)', borderWidth: 2, fill: true, tension: 0.4, spanGaps: true, pointRadius: 4 }]
+            },
+            options: { 
+                ...commonOptions, 
+                plugins: { title: { display: true, text: 'Lượng Nước Trong Hồ (%)', color: '#60a5fa', font: { size: 14 } } }, 
+                scales: { 
+                    ...commonOptions.scales, 
+                    y: { ...commonOptions.scales.y, min: 0, max: 100, title: { display: true, text: 'Mực nước (%)', color: '#3b82f6', font: {size: 13, weight: 'bold'} } } 
+                } 
+            }
+        });
+
+        // 2. Biểu đồ Nhiệt độ
+        if (tempChart) tempChart.destroy();
+        const ctxTemp = document.getElementById('tempChart').getContext('2d');
+        tempChart = new Chart(ctxTemp, {
+            type: 'line',
+            data: {
+                labels: xLabels,
+                datasets: [{ label: 'Nhiệt độ (°C)', data: temp_data.length > 0 ? temp_data : [0], borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.2)', borderWidth: 2, fill: true, tension: 0.4, spanGaps: true, pointRadius: 4 }]
+            },
+            options: { 
+                ...commonOptions, 
+                plugins: { title: { display: true, text: 'Nhiệt độ Môi trường (°C)', color: '#fb923c', font: { size: 14 } } }, 
+                scales: { 
+                    ...commonOptions.scales, 
+                    y: { ...commonOptions.scales.y, min: 20, max: 35, title: { display: true, text: 'Nhiệt độ (°C)', color: '#f97316', font: {size: 13, weight: 'bold'} } } 
+                } 
+            }
+        });
+
+        // 3. Biểu đồ pH
+        if (phChart) phChart.destroy();
+        const ctxPh = document.getElementById('phChart').getContext('2d');
+        phChart = new Chart(ctxPh, {
+            type: 'line',
+            data: {
+                labels: xLabels,
+                datasets: [{ label: 'Độ pH', data: ph_data.length > 0 ? ph_data : [0], borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.2)', borderWidth: 2, fill: true, tension: 0.4, spanGaps: true, pointRadius: 4 }]
+            },
+            options: { 
+                ...commonOptions, 
+                plugins: { title: { display: true, text: 'Chỉ số pH', color: '#34d399', font: { size: 14 } } }, 
+                scales: { 
+                    ...commonOptions.scales, 
+                    y: { ...commonOptions.scales.y, min: 0, max: 14, title: { display: true, text: 'Độ pH', color: '#10b981', font: {size: 13, weight: 'bold'} } } 
+                } 
+            }
+        });
+
     } catch(err) {
         console.error("Lỗi vẽ biểu đồ:", err);
     }
@@ -244,28 +283,79 @@ document.getElementById('chart-time-filter').addEventListener('change', (e) => {
 
 // ---- LOGIC ĐIỀU KHIỂN & CÀI ĐẶT TRUNG TÂM ----
 // Lắng nghe thay đổi chế độ Đèn
-document.getElementById('set-che-do-den').addEventListener('change', (e) => {
-    const mode = e.target.value;
-    document.getElementById('den-manual-group').classList.toggle('hidden', mode !== 'manual');
-    document.getElementById('den-timer-group').classList.toggle('hidden', mode !== 'timer');
-});
+const denSelect = document.getElementById('set-che-do-den');
+if(denSelect) {
+    denSelect.addEventListener('change', (e) => {
+        const mode = e.target.value;
+        const toggle = document.getElementById('den-manual-toggle');
+        const timer = document.getElementById('den-timer-group');
+        if(toggle) toggle.classList.toggle('hidden', mode !== 'manual');
+        if(timer) timer.classList.toggle('hidden', mode !== 'timer');
+    });
+}
 
 // Lắng nghe thay đổi chế độ Bơm
-document.getElementById('set-che-do-bom').addEventListener('change', (e) => {
-    const mode = e.target.value;
-    document.getElementById('bom-manual-group').classList.toggle('hidden', mode !== 'manual');
-    document.getElementById('bom-timer-group').classList.toggle('hidden', mode !== 'timer');
+const bomSelect = document.getElementById('set-che-do-bom');
+if(bomSelect) {
+    bomSelect.addEventListener('change', (e) => {
+        const mode = e.target.value;
+        const toggle = document.getElementById('bom-manual-toggle');
+        const timer = document.getElementById('bom-timer-group');
+        if(toggle) toggle.classList.toggle('hidden', mode !== 'manual');
+        if(timer) timer.classList.toggle('hidden', mode !== 'timer');
+    });
+}
+
+// Lắng nghe gạt công tắc thủ công (Bật/Tắt tức thời bằng API riêng)
+['light', 'pump', 'bomxa', 'bomcap', 'relay5'].forEach(thiet_bi => {
+    const toggle = document.getElementById(`${thiet_bi}-toggle`);
+    if(toggle) {
+        toggle.addEventListener('change', async (e) => {
+            const isChecked = e.target.checked;
+            const statusEl = document.getElementById(`${thiet_bi}-status`);
+            if (statusEl) {
+                if (thiet_bi === 'light') statusEl.textContent = isChecked ? "Đang sáng" : "Đang tắt";
+                if (thiet_bi === 'pump') statusEl.textContent = isChecked ? "Đang chạy" : "Đang tắt";
+                if (thiet_bi === 'bomxa') statusEl.textContent = isChecked ? "Đang xả nước" : "Đang tắt";
+                if (thiet_bi === 'bomcap') statusEl.textContent = isChecked ? "Đang cấp nước" : "Đang tắt";
+                if (thiet_bi === 'relay5') statusEl.textContent = isChecked ? "Đang bật" : "Đang tắt";
+            }
+            
+            // Gửi lệnh API tức thời
+            const mapApi = { 'light': 'den', 'pump': 'bom', 'bomxa': 'bom_xa', 'bomcap': 'bom_cap', 'relay5': 'relay_5' };
+            try {
+                await fetch('http://localhost:8000/api/dieu_khien_thiet_bi', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ thiet_bi: mapApi[thiet_bi], trang_thai: isChecked })
+                });
+            } catch(e) {}
+        });
+    }
 });
 
-// Lắng nghe gạt công tắc thủ công
-document.getElementById('light-toggle').addEventListener('change', (e) => {
-    document.getElementById('light-status').textContent = e.target.checked ? "Đang sáng" : "Đang tắt";
-    document.getElementById('light-status').className = e.target.checked ? "text-yellow" : "";
-});
-document.getElementById('pump-toggle').addEventListener('change', (e) => {
-    document.getElementById('pump-status').textContent = e.target.checked ? "Đang chạy" : "Đang tắt";
-    document.getElementById('pump-status').className = e.target.checked ? "text-blue" : "";
-});
+// Nút "Bắt đầu thay" (Thay nước ngay lập tức)
+const btnQuickWater = document.getElementById('btn-quick-water');
+if(btnQuickWater) {
+    btnQuickWater.addEventListener('click', async () => {
+        const pct = parseFloat(document.getElementById('quick-water-percent').value);
+        if(!pct || pct <= 0 || pct >= 100) { alert("Nhập % cần thay không hợp lệ!"); return; }
+        if(!confirm(`Xác nhận rút ${pct}% nước hồ ngay lập tức? Máy Lọc sẽ tạm ngắt an toàn.`)) return;
+        
+        try {
+            const res = await fetch('http://localhost:8000/api/thay_nuoc_ngay', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phan_tram: pct })
+            });
+            if(res.ok) {
+                const s = document.getElementById('quick-water-status');
+                s.classList.remove('hidden');
+                setTimeout(() => s.classList.add('hidden'), 5000);
+            }
+        } catch(e) {}
+    });
+}
 
 // Hàm Load dữ liệu cài đặt từ Backend
 async function loadSettings() {
@@ -289,13 +379,27 @@ async function loadSettings() {
             
             document.getElementById('set-che-do-den').value = data.che_do_den;
             document.getElementById('light-toggle').checked = Boolean(data.trang_thai_den);
-            document.getElementById('set-den-bat').value = data.hen_gio_den_bat;
-            document.getElementById('set-den-tat').value = data.hen_gio_den_tat;
+            const bD = (data.hen_gio_den_bat || '18:00,,').split(',');
+            const tD = (data.hen_gio_den_tat || '06:00,,').split(',');
+            document.getElementById('set-den-bat-1').value = bD[0] || ''; document.getElementById('set-den-tat-1').value = tD[0] || '';
+            document.getElementById('set-den-bat-2').value = bD[1] || ''; document.getElementById('set-den-tat-2').value = tD[1] || '';
+            document.getElementById('set-den-bat-3').value = bD[2] || ''; document.getElementById('set-den-tat-3').value = tD[2] || '';
+            document.getElementById('set-den-thu').value = data.lich_den_thu || '2,3,4,5,6,7,8';
             
             document.getElementById('set-che-do-bom').value = data.che_do_bom;
             document.getElementById('pump-toggle').checked = Boolean(data.trang_thai_bom);
-            document.getElementById('set-bom-bat').value = data.hen_gio_bom_bat;
-            document.getElementById('set-bom-tat').value = data.hen_gio_bom_tat;
+            const bB = (data.hen_gio_bom_bat || '06:00,,').split(',');
+            const tB = (data.hen_gio_bom_tat || '18:00,,').split(',');
+            document.getElementById('set-bom-bat-1').value = bB[0] || ''; document.getElementById('set-bom-tat-1').value = tB[0] || '';
+            document.getElementById('set-bom-bat-2').value = bB[1] || ''; document.getElementById('set-bom-tat-2').value = tB[1] || '';
+            document.getElementById('set-bom-bat-3').value = bB[2] || ''; document.getElementById('set-bom-tat-3').value = tB[2] || '';
+            document.getElementById('set-bom-thu').value = data.lich_bom_thu || '2,3,4,5,6,7,8';
+            
+            document.getElementById('set-sieu-am-day').value = data.sieu_am_day || 21;
+            document.getElementById('set-sieu-am-tran').value = data.sieu_am_tran || 3;
+            document.getElementById('set-phan-tram-thay').value = data.phan_tram_thay || 0;
+            if(data.lich_thay_nuoc_gio) document.getElementById('set-lich-gio').value = data.lich_thay_nuoc_gio.substring(0, 5);
+            document.getElementById('set-lich-thu').value = data.lich_thay_nuoc_thu || '';
             
             // Kích hoạt sự kiện change để ẩn/hiện đúng UI
             document.getElementById('set-che-do-den').dispatchEvent(new Event('change'));
@@ -325,14 +429,27 @@ async function saveSettings() {
         
         che_do_den: document.getElementById('set-che-do-den').value,
         trang_thai_den: document.getElementById('light-toggle').checked,
-        hen_gio_den_bat: document.getElementById('set-den-bat').value || '18:00',
-        hen_gio_den_tat: document.getElementById('set-den-tat').value || '22:00',
+        hen_gio_den_bat: [document.getElementById('set-den-bat-1').value, document.getElementById('set-den-bat-2').value, document.getElementById('set-den-bat-3').value].join(','),
+        hen_gio_den_tat: [document.getElementById('set-den-tat-1').value, document.getElementById('set-den-tat-2').value, document.getElementById('set-den-tat-3').value].join(','),
+        lich_den_thu: document.getElementById('set-den-thu').value || '2,3,4,5,6,7,8',
         
         che_do_bom: document.getElementById('set-che-do-bom').value,
         trang_thai_bom: document.getElementById('pump-toggle').checked,
-        hen_gio_bom_bat: document.getElementById('set-bom-bat').value || '06:00',
-        hen_gio_bom_tat: document.getElementById('set-bom-tat').value || '18:00'
+        hen_gio_bom_bat: [document.getElementById('set-bom-bat-1').value, document.getElementById('set-bom-bat-2').value, document.getElementById('set-bom-bat-3').value].join(','),
+        hen_gio_bom_tat: [document.getElementById('set-bom-tat-1').value, document.getElementById('set-bom-tat-2').value, document.getElementById('set-bom-tat-3').value].join(','),
+        lich_bom_thu: document.getElementById('set-bom-thu').value || '2,3,4,5,6,7,8',
+        
+        sieu_am_day: parseFloat(document.getElementById('set-sieu-am-day').value) || 21,
+        sieu_am_tran: parseFloat(document.getElementById('set-sieu-am-tran').value) || 3,
+        phan_tram_thay: parseFloat(document.getElementById('set-phan-tram-thay').value) || 0,
+        lich_thay_nuoc_gio: document.getElementById('set-lich-gio').value || '',
+        lich_thay_nuoc_thu: document.getElementById('set-lich-thu').value || ''
     };
+    
+    // Ràng buộc lại Mực nước Max trước khi lưu
+    if (reqData.sieu_am_tran > reqData.chieu_cao - 2) {
+        reqData.sieu_am_tran = reqData.chieu_cao - 2;
+    }
     
     try {
         const res = await fetch('http://localhost:8000/api/cai_dat', {
@@ -513,3 +630,101 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
 
 // Khởi chạy khi load web
 loadSettings();
+
+// Tự động đồng bộ trạng thái Relay và Cảm biến từ Backend mỗi 2 giây
+setInterval(async () => {
+    try {
+        // 1. Đồng bộ trạng thái Nút gạt (Đèn/Bơm/Bơm Xả/Bơm Cấp)
+        const resCaiDat = await fetch('http://localhost:8000/api/cai_dat');
+        if (resCaiDat.ok) {
+            const data = await resCaiDat.json();
+            const lightToggle = document.getElementById('light-toggle');
+            const pumpToggle = document.getElementById('pump-toggle');
+            const bomxaToggle = document.getElementById('bomxa-toggle');
+            const bomcapToggle = document.getElementById('bomcap-toggle');
+            const relay5Toggle = document.getElementById('relay5-toggle');
+            
+            if (lightToggle && lightToggle.checked !== Boolean(data.trang_thai_den)) {
+                lightToggle.checked = Boolean(data.trang_thai_den);
+                const ls = document.getElementById('light-status');
+                if(ls) { ls.textContent = data.trang_thai_den ? "Đang sáng" : "Đang tắt"; }
+            }
+            if (pumpToggle && pumpToggle.checked !== Boolean(data.trang_thai_bom)) {
+                pumpToggle.checked = Boolean(data.trang_thai_bom);
+                const ps = document.getElementById('pump-status');
+                if(ps) { ps.textContent = data.trang_thai_bom ? "Đang chạy" : "Đang tắt"; }
+            }
+            if (bomxaToggle && bomxaToggle.checked !== Boolean(data.trang_thai_bom_xa)) {
+                bomxaToggle.checked = Boolean(data.trang_thai_bom_xa);
+                const xs = document.getElementById('bomxa-status');
+                if(xs) { xs.textContent = data.trang_thai_bom_xa ? "Đang xả nước" : "Đang tắt"; }
+            }
+            if (bomcapToggle && bomcapToggle.checked !== Boolean(data.trang_thai_bom_cap)) {
+                bomcapToggle.checked = Boolean(data.trang_thai_bom_cap);
+                const cs = document.getElementById('bomcap-status');
+                if(cs) { cs.textContent = data.trang_thai_bom_cap ? "Đang cấp nước" : "Đang tắt"; }
+            }
+            if (relay5Toggle && relay5Toggle.checked !== Boolean(data.trang_thai_relay_5)) {
+                relay5Toggle.checked = Boolean(data.trang_thai_relay_5);
+                const r5s = document.getElementById('relay5-status');
+                if(r5s) { r5s.textContent = data.trang_thai_relay_5 ? "Đang bật" : "Đang tắt"; }
+            }
+        }
+        
+        // 2. Đồng bộ Dữ liệu Cảm biến Lên 3 Thẻ Thông tin
+        if(document.getElementById('tab-overview').classList.contains('active')) {
+            const resCb = await fetch('http://localhost:8000/api/cam_bien_moi_nhat');
+            if (resCb.ok) {
+                const cb = await resCb.json();
+                const nhietDo = cb.nhiet_do !== null ? cb.nhiet_do : 0;
+                const doPh = cb.do_ph !== null ? cb.do_ph : 0;
+                const mucNuoc = cb.muc_nuoc !== null ? cb.muc_nuoc : 0;
+                
+                document.getElementById('current-temp').innerText = nhietDo.toFixed(1) + ' °C';
+                document.getElementById('current-ph').innerText = doPh.toFixed(1);
+                document.getElementById('current-water').innerText = mucNuoc.toFixed(0) + ' %';
+                
+                // Cập nhật Cảnh báo
+                const alertBox = document.getElementById('system-alerts');
+                if (alertBox && cb.canh_bao) {
+                    if (cb.canh_bao.length > 0) {
+                        alertBox.innerHTML = cb.canh_bao.map(msg => 
+                            `<div style="background: rgba(239, 68, 68, 0.15); border-left: 4px solid #ef4444; padding: 12px 20px; margin-bottom: 10px; border-radius: 6px; display: flex; align-items: center; color: #ef4444; font-size: 1.05rem;">
+                                <i class="fa-solid fa-triangle-exclamation" style="margin-right: 15px; font-size: 1.4rem;"></i>
+                                <span style="font-weight: 600;">${msg}</span>
+                            </div>`
+                        ).join('');
+                    } else {
+                        alertBox.innerHTML = '';
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        // Bỏ qua lỗi kết nối để tránh spam console khi server sập
+    }
+}, 300); // Rút ngắn từ 2000ms xuống 300ms để siêu mượt
+
+// ==========================================
+// RÀNG BUỘC MỰC NƯỚC MAX BẰNG JS
+// ==========================================
+const maxWaterInput = document.getElementById('set-sieu-am-tran');
+const tankHeightInput = document.getElementById('set-tank-h');
+if(maxWaterInput && tankHeightInput) {
+    maxWaterInput.addEventListener('change', () => {
+        let maxAllowed = parseFloat(tankHeightInput.value) - 2;
+        let currentVal = parseFloat(maxWaterInput.value);
+        if(currentVal > maxAllowed) {
+            alert(`Mực nước Max không được vượt quá Chiều cao hồ trừ đi 2cm (Tối đa: ${maxAllowed} cm)!`);
+            maxWaterInput.value = maxAllowed;
+        }
+    });
+    
+    tankHeightInput.addEventListener('change', () => {
+        let maxAllowed = parseFloat(tankHeightInput.value) - 2;
+        let currentVal = parseFloat(maxWaterInput.value);
+        if(currentVal > maxAllowed) {
+            maxWaterInput.value = maxAllowed;
+        }
+    });
+}

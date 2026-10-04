@@ -61,7 +61,7 @@ body::after { width: 500px; height: 500px; background: #8b5cf6; opacity: 0.1; bo
 .icon-huge { font-size: 4rem; margin-bottom: 15px;}
 .info h3 { font-size: 1rem; color: var(--text-muted); font-weight: 400; }
 .info p { font-size: 2rem; font-weight: 800; color: #fff; }
-.chart-container { padding: 30px; height: 350px; }
+.chart-container { padding: 30px; }
 
 /* INPUT STYLES */
 .glass-input {
