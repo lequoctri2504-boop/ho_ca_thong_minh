@@ -873,10 +873,14 @@ def on_message(client, userdata, msg):
                     mqtt_client.publish("hoca_test/commands", "ALARM_OFF")
 
             conn.commit()
-            cursor.close()
-            conn.close()
     except Exception as e:
         print("Lỗi phân tích dữ liệu MQTT:", e)
+    finally:
+        # LUÔN LUÔN ĐÓNG KẾT NỐI ĐỂ KHÔNG LÀM TREO CLEVER CLOUD
+        if 'cursor' in locals() and cursor:
+            cursor.close()
+        if 'conn' in locals() and conn:
+            conn.close()
 
 mqtt_client.on_connect = on_connect
 mqtt_client.on_message = on_message
