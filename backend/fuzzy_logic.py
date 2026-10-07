@@ -78,8 +78,8 @@ def tinh_toan_fuzzy(nhiet_do_hien_tai, nhiet_min, nhiet_max, ph_hien_tai, ph_min
     except Exception as e:
         diem_phu_hop = 0
         
-    # Làm tròn điểm
-    diem_phu_hop = round(diem_phu_hop, 1)
+    # Làm tròn điểm và ép kiểu về float thuần của Python để tránh lỗi JSON Serialize của FastAPI
+    diem_phu_hop = float(round(diem_phu_hop, 1))
     
     # Kết luận bằng chữ
     if diem_phu_hop >= 70:
@@ -92,8 +92,8 @@ def tinh_toan_fuzzy(nhiet_do_hien_tai, nhiet_min, nhiet_max, ph_hien_tai, ph_min
     return {
         "diem_phu_hop": diem_phu_hop,
         "danh_gia": danh_gia,
-        "delta_temp": round(d_temp, 2),
-        "delta_ph": round(d_ph, 2)
+        "delta_temp": float(round(d_temp, 2)),
+        "delta_ph": float(round(d_ph, 2))
     }
 
 # Code test chạy thử hàm

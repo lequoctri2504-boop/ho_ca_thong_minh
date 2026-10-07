@@ -10,6 +10,7 @@ import datetime
 import json
 import paho.mqtt.client as mqtt
 from apscheduler.schedulers.background import BackgroundScheduler
+import difflib
 
 app = FastAPI()
 
@@ -66,8 +67,44 @@ class CaThuCongRequest(BaseModel):
 
 @app.get("/api/tu_van")
 def api_tu_van(ma_loai_ca: str, so_luong: int = 1):
-    ket_qua_tu_van = tu_van_tuong_thich(ma_loai_ca, so_luong)
-    return ket_qua_tu_van
+    try:
+        ket_qua_tu_van = tu_van_tuong_thich(ma_loai_ca, so_luong)
+        return ket_qua_tu_van
+    except Exception as e:
+        import traceback
+        return {
+            "id_loai_ca": None,
+            "loi_khuyen": f"Lỗi Python (Hãy chụp ảnh màn hình này gửi cho AI):\n{str(e)}\n{traceback.format_exc()}"
+        }
+
+@app.get("/api/ai_goi_y")
+def api_ai_goi_y():
+    conn = lay_ket_noi()
+    if not conn: return []
+    cursor = conn.cursor(dictionary=True)
+    
+    # Lấy toàn bộ mã cá trong DB
+    cursor.execute("SELECT ma_loai FROM loai_ca")
+    all_fishes = [row['ma_loai'] for row in cursor.fetchall()]
+    
+    goi_y = []
+    # Test thử 1 con của từng loài
+    for ma_loai in all_fishes:
+        kq = tu_van_tuong_thich(ma_loai, 1) 
+        # Nếu an toàn và điểm > 80 mới đề xuất
+        if kq['an_toan_tong_the'] and kq.get('diem_phu_hop', 0) >= 80:
+            goi_y.append({
+                "ten_hien_thi": kq['ten_ca'],
+                "diem_phu_hop": kq['diem_phu_hop'],
+                "ly_do": f"{kq.get('chi_tiet_tang_boi','')} {kq.get('chi_tiet_bay_dan','')}"
+            })
+    
+    cursor.close()
+    conn.close()
+    
+    # Sắp xếp theo điểm phù hợp giảm dần và lấy top 3
+    goi_y.sort(key=lambda x: x['diem_phu_hop'], reverse=True)
+    return goi_y[:3]
 
 # --- HÀM LOGIC SIÊU TƯ VẤN 3 LỚP (MÔI TRƯỜNG - MẬT ĐỘ - XÃ HỘI) ---
 def tu_van_tuong_thich(ma_loai_ca, so_luong=1):
@@ -86,11 +123,37 @@ def tu_van_tuong_thich(ma_loai_ca, so_luong=1):
     if not conn: return ket_qua
     cursor = conn.cursor(dictionary=True)
     
-    # Lấy thông tin cá muốn thả
-    cursor.execute("SELECT * FROM loai_ca WHERE ma_loai = %s OR ten_hien_thi = %s", (ma_loai_ca, ma_loai_ca))
-    ca_moi = cursor.fetchone()
+    # --- LỚP BẢO VỆ NLP (Xử lý chuỗi & So khớp mờ difflib) ---
+    cursor.execute("SELECT * FROM loai_ca")
+    danh_sach_db = cursor.fetchall()
+    
+    ca_moi = None
+    # 1. Chuẩn hóa chuỗi người dùng gõ
+    keyword = str(ma_loai_ca).strip().lower()
+    keyword = keyword.replace("7", "bảy").replace("3", "ba").replace("4", "tứ")
+    
+    # 2. Xây dựng Kho từ vựng (Corpus) từ Database
+    ten_hien_thi_list = [c['ten_hien_thi'].lower() for c in danh_sach_db]
+    ten_tieng_anh_list = [str(c['ten_tieng_anh']).lower() for c in danh_sach_db if c['ten_tieng_anh']]
+    ma_loai_list = [c['ma_loai'].lower() for c in danh_sach_db]
+    tu_khoa_tim_kiem = ten_hien_thi_list + ten_tieng_anh_list + ma_loai_list
+    
+    # 3. Thuật toán Pattern Matching (Ratcliff/Obershelp)
+    # Lấy ra từ gần giống nhất, độ tin cậy tối thiểu 80% (cutoff=0.8) để tránh nhận nhầm (ví dụ 'cá chim' thành 'cá hồng kim')
+    ket_qua_match = difflib.get_close_matches(keyword, tu_khoa_tim_kiem, n=1, cutoff=0.8)
+    
+    if ket_qua_match:
+        tu_khoa_chuan = ket_qua_match[0]
+        # Map ngược từ khóa chuẩn về dòng dữ liệu cá
+        for c in danh_sach_db:
+            if (c['ten_hien_thi'].lower() == tu_khoa_chuan or 
+                str(c['ten_tieng_anh']).lower() == tu_khoa_chuan or 
+                c['ma_loai'].lower() == tu_khoa_chuan):
+                ca_moi = c
+                break
+                
     if not ca_moi:
-        ket_qua["loi_khuyen"] = f"Không tìm thấy thông tin của loài '{ma_loai_ca}'."
+        ket_qua["loi_khuyen"] = f"Hệ thống AI không thể nhận diện được loài cá '{ma_loai_ca}'. Vui lòng kiểm tra lại lỗi chính tả (Gợi ý: Bảy Màu, La Hán...)."
         cursor.close(); conn.close(); return ket_qua
         
     ket_qua["id_loai_ca"] = ca_moi['id']
@@ -102,8 +165,12 @@ def tu_van_tuong_thich(ma_loai_ca, so_luong=1):
     nhiet_hien_tai = cam_bien['nhiet_do'] if cam_bien else 27.0
     ph_hien_tai = cam_bien['do_ph'] if cam_bien else 7.2
     
+    # Bù nhiệt độ môi trường Miền Nam (Tăng 2 độ so với sách vở để phù hợp thực tế)
+    nhiet_min_bu = ca_moi['nhiet_do_min'] + 2.0
+    nhiet_max_bu = ca_moi['nhiet_do_max'] + 2.0
+    
     kq_fuzzy = tinh_toan_fuzzy(
-        nhiet_hien_tai, ca_moi['nhiet_do_min'], ca_moi['nhiet_do_max'],
+        nhiet_hien_tai, nhiet_min_bu, nhiet_max_bu,
         ph_hien_tai, ca_moi['ph_min'], ca_moi['ph_max']
     )
     diem_fuzzy = kq_fuzzy["diem_phu_hop"]
@@ -112,10 +179,10 @@ def tu_van_tuong_thich(ma_loai_ca, so_luong=1):
     ket_qua["diem_phu_hop"] = diem_fuzzy
     
     if kq_fuzzy['delta_temp'] == 0:
-        ket_qua["chi_tiet_nhiet"] = "An toàn"
+        ket_qua["chi_tiet_nhiet"] = "🟢 An toàn (Đã bù +2°C khí hậu miền Nam)"
     else:
         trang_thai = "Nóng hơn" if kq_fuzzy['delta_temp'] > 0 else "Lạnh hơn"
-        ket_qua["chi_tiet_nhiet"] = f"{trang_thai} {abs(kq_fuzzy['delta_temp'])}°C so với ngưỡng (Chuẩn: {ca_moi['nhiet_do_min']}-{ca_moi['nhiet_do_max']}°C, Hiện tại: {nhiet_hien_tai}°C)"
+        ket_qua["chi_tiet_nhiet"] = f"{trang_thai} {abs(kq_fuzzy['delta_temp'])}°C so với ngưỡng (Chuẩn miền Nam: {nhiet_min_bu}-{nhiet_max_bu}°C, Hiện tại: {nhiet_hien_tai}°C)"
         
     if kq_fuzzy['delta_ph'] == 0:
         ket_qua["chi_tiet_ph"] = "An toàn"
@@ -123,44 +190,114 @@ def tu_van_tuong_thich(ma_loai_ca, so_luong=1):
         trang_thai = "Kiềm hơn" if kq_fuzzy['delta_ph'] > 0 else "Chua hơn"
         ket_qua["chi_tiet_ph"] = f"{trang_thai} {abs(kq_fuzzy['delta_ph'])} so với ngưỡng (Chuẩn: {ca_moi['ph_min']}-{ca_moi['ph_max']}, Hiện tại: {ph_hien_tai})"
     
-    # LỚP 2: MẬT ĐỘ (Không gian sinh tồn)
+    # LỚP 2: MẬT ĐỘ (Tải trọng sinh học - Bioload)
     cursor.execute("SELECT * FROM cai_dat_ho WHERE id = 1")
     ho_ca = cursor.fetchone()
-    the_tich_ho = (ho_ca['chieu_dai'] * ho_ca['chieu_rong'] * ho_ca['chieu_cao']) / 1000 # Lít
+    if not ho_ca:
+        ho_ca = {'chieu_dai': 60.0, 'chieu_rong': 40.0, 'chieu_cao': 40.0, 'loai_loc': 'Thác', 'co_cay_thuy_sinh': False}
+        
+    the_tich_phu_bi = (ho_ca['chieu_dai'] * ho_ca['chieu_rong'] * ho_ca['chieu_cao']) / 1000 # Lít
+    # Trừ hao 12% cho độ dày kính, phân nền, lũa, đá (để ra thể tích nước thực tế)
+    the_tich_thuc_te = the_tich_phu_bi * 0.88 
     
+    # Tính hệ số Lọc & Cây thủy sinh
+    he_so_loc = 1.0
+    if ho_ca.get('loai_loc') == 'Vi sinh': he_so_loc = 0.8
+    elif ho_ca.get('loai_loc') == 'Thùng': he_so_loc = 1.3
+    
+    suc_chua_thuc_te = the_tich_thuc_te * he_so_loc
+    if ho_ca.get('co_cay_thuy_sinh'):
+        suc_chua_thuc_te *= 1.2 # Tăng 20%
+        
+    # Công thức Bioload
     cursor.execute("""
-        SELECT SUM(cdn.so_luong * lc.the_tich_yeu_cau) as the_tich_da_dung 
+        SELECT lc.kich_thuoc_adult, lc.he_so_bioload, cdn.so_luong 
         FROM ca_dang_nuoi cdn 
         JOIN loai_ca lc ON cdn.id_loai_ca = lc.id
     """)
-    the_tich_da_dung = cursor.fetchone()['the_tich_da_dung'] or 0
-    the_tich_du = the_tich_ho - the_tich_da_dung
-    
-    the_tich_can_thiet = ca_moi['the_tich_yeu_cau'] * so_luong
-    hop_mat_do = the_tich_du >= the_tich_can_thiet
-    
-    if hop_mat_do:
-        ket_qua["chi_tiet_mat_do"] = f"Hồ rộng rãi (Thể tích dư: {the_tich_du:.1f}L / Bầy {so_luong} con cần: {the_tich_can_thiet}L)"
-    else:
-        ket_qua["chi_tiet_mat_do"] = f"Quá tải! Hồ chỉ dư {the_tich_du:.1f}L nhưng {so_luong} con cần tới {the_tich_can_thiet}L."
+    ca_cu_list = cursor.fetchall()
+    bioload_da_dung = 0
+    for c in ca_cu_list:
+        kich_thuoc = c.get('kich_thuoc_adult') or 5.0
+        hs_bioload = c.get('he_so_bioload') or 1.0
+        # Tính theo lập phương kích thước, chia hằng số để khớp thể tích
+        bioload_da_dung += (kich_thuoc ** 3) * hs_bioload * c['so_luong'] * 0.05
         
-    # LỚP 3: XÃ HỘI (Tính cách, xung đột)
+    kich_thuoc_moi = ca_moi.get('kich_thuoc_adult') or 5.0
+    hs_bioload_moi = ca_moi.get('he_so_bioload') or 1.0
+    bioload_can_them = (kich_thuoc_moi ** 3) * hs_bioload_moi * so_luong * 0.05
+    
+    tong_bioload = bioload_da_dung + bioload_can_them
+    phan_tram_bioload = (tong_bioload / suc_chua_thuc_te) * 100 if suc_chua_thuc_te > 0 else 100
+    
+    if phan_tram_bioload <= 100:
+        hop_mat_do = True
+        ket_qua["chi_tiet_mat_do"] = f"🟢 Lý tưởng ({phan_tram_bioload:.1f}%). Hệ thống Lọc {ho_ca.get('loai_loc','')} xử lý nhẹ nhàng, cá phát triển tốt."
+    elif phan_tram_bioload <= 250:
+        hop_mat_do = True
+        ket_qua["chi_tiet_mat_do"] = f"🟡 Nuôi đông ({phan_tram_bioload:.1f}%). Vẫn có thể nuôi, nhưng hệ vi sinh chịu tải lớn. Bắt buộc thay nước 30% hàng tuần!"
+    else:
+        hop_mat_do = False
+        ket_qua["chi_tiet_mat_do"] = f"🔴 Quá tải độc hại ({phan_tram_bioload:.1f}%)! Tuyệt đối không thả, cá sẽ chết vì ngộ độc Amoniac."
+        
+    # LỚP 3: XÃ HỘI (Xung đột sinh tồn, Tầng bơi & Bầy đàn)
     cursor.execute("""
-        SELECT lc.ten_hien_thi, lc.tinh_cach FROM ca_dang_nuoi cdn 
+        SELECT lc.ten_hien_thi, lc.tinh_cach, lc.kich_thuoc_adult, lc.kieu_vay, lc.tang_boi, cdn.so_luong 
+        FROM ca_dang_nuoi cdn 
         JOIN loai_ca lc ON cdn.id_loai_ca = lc.id
     """)
     danh_sach_ca_cu = cursor.fetchall()
     
     hop_bay = True
-    ket_qua["chi_tiet_bay_dan"] = "Hòa bình"
+    ket_qua["chi_tiet_bay_dan"] = "🟢 An toàn, không có xung đột nguy hiểm."
+    
+    # --- LUẬT BẦY ĐÀN TỐI THIỂU (Schooling Rule) ---
+    cursor.execute("SELECT SUM(so_luong) as sl FROM ca_dang_nuoi WHERE id_loai_ca = %s", (ca_moi['id'],))
+    row_sl = cursor.fetchone()
+    sl_hien_co = int(row_sl['sl'] or 0) if row_sl else 0
+    tong_loai_nay = sl_hien_co + so_luong
+    bay_min = ca_moi.get('so_luong_bay_min') or 1
+    
+    if tong_loai_nay < bay_min:
+        ket_qua["chi_tiet_bay_dan"] = f"🔴 Gây Stress: {ca_moi['ten_hien_thi']} tập tính bầy đàn. Cần thả ít nhất {bay_min} con (hồ bạn có {tong_loai_nay})."
+        hop_bay = False
+    # --- PHÂN TÍCH TẦNG BƠI (Water Column) ---
+    tang_boi_hien_tai = [c.get('tang_boi') for c in danh_sach_ca_cu if c.get('tang_boi')]
+    if ca_moi.get('tang_boi') in tang_boi_hien_tai:
+        ket_qua["chi_tiet_tang_boi"] = f"🟡 Trùng lặp: Hồ đã có cá sống ở {ca_moi.get('tang_boi')}, có thể giành thức ăn."
+    else:
+        ket_qua["chi_tiet_tang_boi"] = f"🟢 Tuyệt vời: Cá bơi ở {ca_moi.get('tang_boi')} lấp đầy khoảng trống sinh thái."
     
     for ca_cu in danh_sach_ca_cu:
-        if ca_moi['tinh_cach'] == 'Hung dữ' and ca_cu['tinh_cach'] == 'Hòa bình':
-            ket_qua["chi_tiet_bay_dan"] = f"Cảnh báo: {ca_moi['ten_hien_thi']} hung dữ có thể cắn {ca_cu['ten_hien_thi']}."
+        # Luật Ăn thịt (Predation rule)
+        size_cu = ca_cu.get('kich_thuoc_adult') or 5.0
+        size_moi = ca_moi.get('kich_thuoc_adult') or 5.0
+        if size_moi >= size_cu * 2.5:
+            ket_qua["chi_tiet_bay_dan"] = f"🔴 Nuốt chửng: {ca_moi['ten_hien_thi']} ({size_moi}cm) sẽ ăn thịt {ca_cu['ten_hien_thi']} ({size_cu}cm)."
             hop_bay = False
             break
-        elif ca_moi['tinh_cach'] == 'Hòa bình' and ca_cu['tinh_cach'] == 'Hung dữ':
-            ket_qua["chi_tiet_bay_dan"] = f"Nguy hiểm: {ca_moi['ten_hien_thi']} có thể bị {ca_cu['ten_hien_thi']} trong hồ cắn chết."
+        if size_cu >= size_moi * 2.5:
+            ket_qua["chi_tiet_bay_dan"] = f"🔴 Mồi nhậu: {ca_moi['ten_hien_thi']} ({size_moi}cm) sẽ bị {ca_cu['ten_hien_thi']} ({size_cu}cm) nuốt chửng."
+            hop_bay = False
+            break
+            
+        # Luật Rỉa vây (Fin-nipper)
+        if ca_moi.get('tinh_cach') == 'Rỉa vây' and ca_cu.get('kieu_vay') == 'Dài':
+            ket_qua["chi_tiet_bay_dan"] = f"🔴 Rỉa vây: {ca_moi['ten_hien_thi']} (Rỉa vây) sẽ cắn nát vây dài của {ca_cu['ten_hien_thi']}."
+            hop_bay = False
+            break
+        if ca_cu.get('tinh_cach') == 'Rỉa vây' and ca_moi.get('kieu_vay') == 'Dài':
+            ket_qua["chi_tiet_bay_dan"] = f"🔴 Rỉa vây: {ca_cu['ten_hien_thi']} trong hồ sẽ cắn nát vây dài của cá mới."
+            hop_bay = False
+            break
+            
+        # Luật Hung dữ
+        if ca_moi['tinh_cach'] == 'Hung dữ' and ca_cu['tinh_cach'] != 'Hung dữ':
+            ket_qua["chi_tiet_bay_dan"] = f"🔴 Tấn công: {ca_moi['ten_hien_thi']} (Hung dữ) sẽ cắn chết {ca_cu['ten_hien_thi']}."
+            hop_bay = False
+            break
+        elif ca_cu['tinh_cach'] == 'Hung dữ' and ca_moi['tinh_cach'] != 'Hung dữ':
+            ket_qua["chi_tiet_bay_dan"] = f"🔴 Bị bắt nạt: Cá mới sẽ bị {ca_cu['ten_hien_thi']} (Hung dữ) đánh chết."
             hop_bay = False
             break
             
@@ -168,10 +305,26 @@ def tu_van_tuong_thich(ma_loai_ca, so_luong=1):
     hop_moi_truong = diem_fuzzy >= 40 # Ít nhất phải mức Rủi ro trở lên mới cho thả
     ket_qua["an_toan_tong_the"] = hop_moi_truong and hop_mat_do and hop_bay
     
-    if ket_qua["an_toan_tong_the"]:
-        ket_qua["loi_khuyen"] = f"CÓ THỂ THẢ CÁ! Độ an toàn môi trường: {diem_fuzzy}% ({danh_gia_fuzzy}). Mật độ và Bầy đàn an toàn."
+    # --- TẠO CÂU TƯ VẤN CHUYÊN NGHIỆP ---
+    tong_ca_cu = sum(c['so_luong'] for c in danh_sach_ca_cu)
+    if tong_ca_cu > 0:
+        danh_sach_ten = ", ".join([f"{c['so_luong']} {c['ten_hien_thi']}" for c in danh_sach_ca_cu])
+        hien_trang_ho = f"Hồ {the_tich_phu_bi:.1f}L (nước thực tế ~{the_tich_thuc_te:.1f}L) đang nuôi {tong_ca_cu} con ({danh_sach_ten})"
     else:
-        ket_qua["loi_khuyen"] = f"KHÔNG NÊN THẢ CÁ! Độ an toàn môi trường: {diem_fuzzy}% ({danh_gia_fuzzy}). Có xung đột sinh thái (Xem chi tiết bên dưới)."
+        hien_trang_ho = f"Hồ {the_tich_phu_bi:.1f}L (nước thực tế ~{the_tich_thuc_te:.1f}L) hiện đang trống"
+        
+    if ket_qua["an_toan_tong_the"]:
+        ket_qua["loi_khuyen"] = f"🟢 CÓ THỂ THẢ CÁ! {hien_trang_ho}. Việc thả thêm {so_luong} con {ca_moi['ten_hien_thi']} là hoàn toàn phù hợp. Môi trường (Nhiệt độ, pH, Mật độ) đều nằm trong ngưỡng lý tưởng."
+    else:
+        # Truy xuất nguyên nhân chính để báo cáo
+        if not hop_mat_do:
+            nguyen_nhan = "Hồ đã quá tải sinh học (Mật độ cá quá đông)"
+        elif not hop_bay:
+            nguyen_nhan = "Xung đột bầy đàn hoặc bị ăn thịt"
+        else:
+            nguyen_nhan = f"Điều kiện môi trường không phù hợp ({danh_gia_fuzzy})"
+            
+        ket_qua["loi_khuyen"] = f"🔴 KHÔNG NÊN THẢ! {hien_trang_ho}. Nếu bạn thả thêm {so_luong} con {ca_moi['ten_hien_thi']}, hệ sinh thái sẽ bị sụp đổ do: {nguyen_nhan}. Hãy đọc kỹ bảng phân tích bên dưới!"
         
     cursor.close()
     conn.close()
@@ -187,6 +340,8 @@ class CaiDatRequest(BaseModel):
     chieu_dai: float
     chieu_rong: float
     chieu_cao: float
+    loai_loc: str = "Thác"
+    co_cay_thuy_sinh: bool = False
     chu_ky_gui_data: int
     che_do_den: str
     trang_thai_den: bool
@@ -229,7 +384,7 @@ def api_luu_cai_dat(req: CaiDatRequest):
     sql = """
     UPDATE cai_dat_ho SET 
         nhiet_do_min=%s, nhiet_do_max=%s, ph_min=%s, ph_max=%s, muc_nuoc_min=%s, 
-        chieu_dai=%s, chieu_rong=%s, chieu_cao=%s, chu_ky_gui_data=%s,
+        chieu_dai=%s, chieu_rong=%s, chieu_cao=%s, loai_loc=%s, co_cay_thuy_sinh=%s, chu_ky_gui_data=%s,
         che_do_den=%s, trang_thai_den=%s, hen_gio_den_bat=%s, hen_gio_den_tat=%s, lich_den_thu=%s,
         che_do_bom=%s, trang_thai_bom=%s, hen_gio_bom_bat=%s, hen_gio_bom_tat=%s, lich_bom_thu=%s,
         sieu_am_day=%s, sieu_am_tran=%s, phan_tram_thay=%s, lich_thay_nuoc_gio=%s, lich_thay_nuoc_thu=%s,
@@ -238,7 +393,7 @@ def api_luu_cai_dat(req: CaiDatRequest):
     """
     cursor.execute(sql, (
         req.nhiet_do_min, req.nhiet_do_max, req.ph_min, req.ph_max, req.muc_nuoc_min,
-        req.chieu_dai, req.chieu_rong, req.chieu_cao, req.chu_ky_gui_data,
+        req.chieu_dai, req.chieu_rong, req.chieu_cao, req.loai_loc, req.co_cay_thuy_sinh, req.chu_ky_gui_data,
         req.che_do_den, req.trang_thai_den, req.hen_gio_den_bat, req.hen_gio_den_tat, req.lich_den_thu,
         req.che_do_bom, req.trang_thai_bom, req.hen_gio_bom_bat, req.hen_gio_bom_tat, req.lich_bom_thu,
         req.sieu_am_day, req.sieu_am_tran, req.phan_tram_thay, req.lich_thay_nuoc_gio, req.lich_thay_nuoc_thu,
@@ -247,6 +402,9 @@ def api_luu_cai_dat(req: CaiDatRequest):
     conn.commit()
     cursor.close()
     conn.close()
+    
+    # Bắn MQTT đồng bộ chiều cao bể xuống ESP32 để OLED hiển thị chính xác
+    mqtt_client.publish("hoca_test/commands", f"CFG_W_{req.sieu_am_day}_{req.sieu_am_tran}")
     
     # Kích hoạt lệnh điều khiển MQTT NGAY LẬP TỨC 
     # (Dù đang ở chế độ nào, khi user bấm trên web thì ưu tiên chạy lệnh đó)
@@ -623,7 +781,16 @@ def on_message(client, userdata, msg):
             cursor.close(); conn.close()
             return
 
-        # 2. Nếu là bản tin cảm biến định kỳ
+        # 2. Xử lý yêu cầu xin cấu hình từ ESP32 khi vừa khởi động
+        if data.get('request') == 'GET_CONFIG':
+            cursor.execute("SELECT sieu_am_day, sieu_am_tran FROM cai_dat_ho WHERE id=1")
+            cd = cursor.fetchone()
+            if cd:
+                mqtt_client.publish("hoca_test/commands", f"CFG_W_{cd['sieu_am_day']}_{cd['sieu_am_tran']}")
+            cursor.close(); conn.close()
+            return
+            
+        # 3. Nếu là bản tin cảm biến định kỳ
         nhiet_do = data.get('nhiet_do', 0)
         do_ph = data.get('do_ph', 0)
         khoang_cach_do_duoc = data.get('muc_nuoc', 0) # Bản mới ESP32 gửi cm thô
