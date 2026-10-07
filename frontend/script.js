@@ -1,3 +1,8 @@
+// CẤU HÌNH API TỰ ĐỘNG (Chạy được cả trên máy cá nhân và trên mạng)
+const API_BASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'http://localhost:8000' 
+    : 'https://ho-ca-thong-minh.onrender.com';
+
 // ---- LOGIC CHUYỂN TAB (SPA) ----
 const navBtns = document.querySelectorAll('.nav-btn');
 const tabPanes = document.querySelectorAll('.tab-pane');
@@ -87,7 +92,7 @@ analyzeBtn.addEventListener('click', async () => {
 
     const formData = new FormData(); formData.append('anh_upload', currentFile);
     try {
-        const response = await fetch('http://localhost:8000/api/nhan_dien_anh', { method: 'POST', body: formData });
+        const response = await fetch(API_BASE_URL + '/api/nhan_dien_anh', { method: 'POST', body: formData });
         if (!response.ok) throw new Error('Lỗi Server');
         const data = await response.json();
         
@@ -131,7 +136,7 @@ document.getElementById('btn-ask-expert').addEventListener('click', async () => 
         altList.innerHTML = '<li><i class="fa-solid fa-spinner fa-spin"></i> AI đang phân tích dữ liệu 21 loài cá...</li>';
         
         try {
-            const res = await fetch('http://localhost:8000/api/ai_goi_y');
+            const res = await fetch(API_BASE_URL + '/api/ai_goi_y');
             const suggestions = await res.json();
             altList.innerHTML = '';
             
@@ -166,7 +171,7 @@ document.getElementById('manual-analyze-btn').addEventListener('click', async ()
     aiResultBox.classList.add('hidden');
 
     try {
-        const response = await fetch(`http://localhost:8000/api/tu_van?ma_loai_ca=${encodeURIComponent(ma_loai_ca)}&so_luong=${qty}`);
+        const response = await fetch(`${API_BASE_URL}/api/tu_van?ma_loai_ca=${encodeURIComponent(ma_loai_ca)}&so_luong=${qty}`);
         if (!response.ok) throw new Error('Lỗi Server');
         const data = await response.json();
         
@@ -266,7 +271,7 @@ function renderTuVan(chi_tiet, loi_khuyen_tong_the) {
         if (!chi_tiet.an_toan_tong_the) {
             altBox.classList.remove('hidden');
             altList.innerHTML = '<li><i class="fa-solid fa-spinner fa-spin"></i> Đang tìm loài cá thay thế phù hợp nhất...</li>';
-            fetch('http://localhost:8000/api/ai_goi_y')
+            fetch(API_BASE_URL + '/api/ai_goi_y')
                 .then(res => res.json())
                 .then(data => {
                     altList.innerHTML = '';
@@ -297,7 +302,7 @@ document.getElementById('ai-suggest-btn').addEventListener('click', async () => 
     suggestBox.classList.add('hidden');
     
     try {
-        const response = await fetch('http://localhost:8000/api/ai_goi_y');
+        const response = await fetch(API_BASE_URL + '/api/ai_goi_y');
         if (!response.ok) throw new Error('Lỗi Server');
         const data = await response.json();
         
@@ -324,7 +329,7 @@ let waterChart, tempChart, phChart;
 
 async function renderChart(ngay = 0) {
     try {
-        const res = await fetch(`http://localhost:8000/api/bieu_do?ngay=${ngay}`);
+        const res = await fetch(`${API_BASE_URL}/api/bieu_do?ngay=${ngay}`);
         if (!res.ok) return;
         const du_lieu = await res.json();
         
@@ -478,7 +483,7 @@ if(bomSelect) {
             // Gửi lệnh API tức thời
             const mapApi = { 'light': 'den', 'pump': 'bom', 'bomxa': 'bom_xa', 'bomcap': 'bom_cap', 'relay5': 'relay_5' };
             try {
-                await fetch('http://localhost:8000/api/dieu_khien_thiet_bi', {
+                await fetch(API_BASE_URL + '/api/dieu_khien_thiet_bi', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ thiet_bi: mapApi[thiet_bi], trang_thai: isChecked })
@@ -497,7 +502,7 @@ if(btnQuickWater) {
         if(!confirm(`Xác nhận rút ${pct}% nước hồ ngay lập tức? Máy Lọc sẽ tạm ngắt an toàn.`)) return;
         
         try {
-            const res = await fetch('http://localhost:8000/api/thay_nuoc_ngay', {
+            const res = await fetch(API_BASE_URL + '/api/thay_nuoc_ngay', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ phan_tram: pct })
@@ -514,7 +519,7 @@ if(btnQuickWater) {
 // Hàm Load dữ liệu cài đặt từ Backend
 async function loadSettings() {
     try {
-        const res = await fetch('http://localhost:8000/api/cai_dat');
+        const res = await fetch(API_BASE_URL + '/api/cai_dat');
         if (!res.ok) return;
         const data = await res.json();
         
@@ -610,7 +615,7 @@ async function saveSettings() {
     }
     
     try {
-        const res = await fetch('http://localhost:8000/api/cai_dat', {
+        const res = await fetch(API_BASE_URL + '/api/cai_dat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(reqData)
@@ -636,7 +641,7 @@ document.getElementById('btn-save-settings').addEventListener('click', async () 
 // Hàm Load Lịch sử Cảnh báo Hệ thống
 async function loadAlertHistory() {
     try {
-        const res = await fetch('http://localhost:8000/api/canh_bao');
+        const res = await fetch(API_BASE_URL + '/api/canh_bao');
         if (!res.ok) return;
         const alerts = await res.json();
         
@@ -693,7 +698,7 @@ document.getElementById('btn-save-tank').addEventListener('click', async () => {
 
 async function loadFishList() {
     try {
-        const res = await fetch('http://localhost:8000/api/ca_dang_nuoi');
+        const res = await fetch(API_BASE_URL + '/api/ca_dang_nuoi');
         if (!res.ok) return;
         const fishList = await res.json();
         const tbody = document.getElementById('fish-list-tbody');
@@ -724,7 +729,7 @@ async function loadFishList() {
                 const id = e.currentTarget.getAttribute('data-id');
                 const sl = parseInt(e.currentTarget.value);
                 if (sl >= 1) {
-                    await fetch(`http://localhost:8000/api/ca_dang_nuoi/${id}`, { 
+                    await fetch(`${API_BASE_URL}/api/ca_dang_nuoi/${id}`, { 
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ so_luong: sl })
@@ -739,7 +744,7 @@ async function loadFishList() {
             btn.addEventListener('click', async (e) => {
                 const id = e.currentTarget.getAttribute('data-id');
                 if(confirm("Bạn có chắc chắn muốn xóa loài cá này khỏi hồ?")) {
-                    await fetch(`http://localhost:8000/api/ca_dang_nuoi/${id}`, { method: 'DELETE' });
+                    await fetch(`${API_BASE_URL}/api/ca_dang_nuoi/${id}`, { method: 'DELETE' });
                     loadFishList();
                 }
             });
@@ -758,7 +763,7 @@ document.getElementById('btn-add-fish').addEventListener('click', async () => {
     }
     
     try {
-        const res = await fetch('http://localhost:8000/api/ca_dang_nuoi', {
+        const res = await fetch(API_BASE_URL + '/api/ca_dang_nuoi', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ten_ca: ten, so_luong: sl })
@@ -793,7 +798,7 @@ loadSettings();
 setInterval(async () => {
     try {
         // 1. Đồng bộ trạng thái Nút gạt (Đèn/Bơm/Bơm Xả/Bơm Cấp)
-        const resCaiDat = await fetch('http://localhost:8000/api/cai_dat');
+        const resCaiDat = await fetch(API_BASE_URL + '/api/cai_dat');
         if (resCaiDat.ok) {
             const data = await resCaiDat.json();
             const lightToggle = document.getElementById('light-toggle');
@@ -831,7 +836,7 @@ setInterval(async () => {
         
         // 2. Đồng bộ Dữ liệu Cảm biến Lên 3 Thẻ Thông tin
         if(document.getElementById('tab-overview').classList.contains('active')) {
-            const resCb = await fetch('http://localhost:8000/api/cam_bien_moi_nhat');
+            const resCb = await fetch(API_BASE_URL + '/api/cam_bien_moi_nhat');
             if (resCb.ok) {
                 const cb = await resCb.json();
                 const nhietDo = cb.nhiet_do !== null ? cb.nhiet_do : 0;

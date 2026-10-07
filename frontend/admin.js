@@ -1,3 +1,8 @@
+// CẤU HÌNH API TỰ ĐỘNG (Chạy được cả trên máy cá nhân và trên mạng)
+const API_BASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'http://localhost:8000' 
+    : 'https://ho-ca-thong-minh.onrender.com';
+
 // ---- LOGIC CHUYỂN TAB (SPA) ----
 const navBtns = document.querySelectorAll('.nav-btn');
 const tabPanes = document.querySelectorAll('.tab-pane');
@@ -25,7 +30,7 @@ let editFishId = null;
 
 async function loadFishDB() {
     try {
-        const res = await fetch('http://localhost:8000/api/admin/loai_ca');
+        const res = await fetch(API_BASE_URL + '/api/admin/loai_ca');
         if (!res.ok) return;
         const fishList = await res.json();
         allFishes = fishList;
@@ -64,7 +69,7 @@ async function loadFishDB() {
             btn.addEventListener('click', async (e) => {
                 const id = e.currentTarget.getAttribute('data-id');
                 if(confirm("Bạn có chắc chắn muốn xóa loài cá này khỏi cơ sở dữ liệu?")) {
-                    await fetch(`http://localhost:8000/api/admin/loai_ca/${id}`, { method: 'DELETE' });
+                    await fetch(`${API_BASE_URL}/api/admin/loai_ca/${id}`, { method: 'DELETE' });
                     loadFishDB();
                 }
             });
@@ -137,7 +142,7 @@ document.getElementById('fish-form').addEventListener('submit', async (e) => {
         nguon_trich_dan: document.getElementById('frm-nguon').value
     };
     
-    const url = editFishId ? `http://localhost:8000/api/admin/loai_ca/${editFishId}` : 'http://localhost:8000/api/admin/loai_ca';
+    const url = editFishId ? `${API_BASE_URL}/api/admin/loai_ca/${editFishId}` : API_BASE_URL + '/api/admin/loai_ca';
     const method = editFishId ? 'PUT' : 'POST';
     
     try {
@@ -164,7 +169,7 @@ document.getElementById('fish-form').addEventListener('submit', async (e) => {
 // ---- TAB YÊU CẦU TỪ KHÁCH ----
 async function loadUserRequests() {
     try {
-        const res = await fetch('http://localhost:8000/api/admin/yeu_cau');
+        const res = await fetch(API_BASE_URL + '/api/admin/yeu_cau');
         if (!res.ok) return;
         const requests = await res.json();
         
