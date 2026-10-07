@@ -67,16 +67,23 @@ function handleFile(file) {
     reader.readAsDataURL(file);
 }
 
+let currentYoloData = null; // Lưu tạm dữ liệu AI trả về
+
 analyzeBtn.addEventListener('click', async () => {
     if (analyzeBtn.textContent === "Nhận diện ảnh khác") {
         previewImg.style.display = 'none'; previewImg.src = ''; currentFile = null;
         resultSection.classList.add('hidden'); analyzeBtn.textContent = "Nhận diện & Đánh giá";
-        analyzeBtn.disabled = true; fileInput.value = ''; return; 
+        analyzeBtn.disabled = true; fileInput.value = ''; 
+        document.getElementById('ecological-analysis-box').classList.add('hidden');
+        document.getElementById('alternative-suggestion-box').classList.add('hidden');
+        return; 
     }
     if (!currentFile) return;
 
     analyzeBtn.classList.add('hidden'); loading.classList.remove('hidden');
     resultSection.classList.add('hidden'); aiResultBox.classList.remove('hidden');
+    document.getElementById('ecological-analysis-box').classList.add('hidden');
+    document.getElementById('alternative-suggestion-box').classList.add('hidden');
 
     const formData = new FormData(); formData.append('anh_upload', currentFile);
     try {
@@ -84,18 +91,62 @@ analyzeBtn.addEventListener('click', async () => {
         if (!response.ok) throw new Error('Lỗi Server');
         const data = await response.json();
         
-        // Render Kết quả AI
+        currentYoloData = data; // Lưu lại để dùng cho nút Hỏi chuyên gia
+        
+        // Render Kết quả AI (Chưa hiển thị Sinh thái)
         document.getElementById('res-species').textContent = data.loai_ca;
         document.getElementById('res-confidence').textContent = (data.do_chinh_xac * 100).toFixed(1) + '%';
         
-        // Render Báo cáo Tương thích
-        renderTuVan(data.chi_tiet, data.tu_van);
-
         loading.classList.add('hidden'); resultSection.classList.remove('hidden');
         analyzeBtn.classList.remove('hidden'); analyzeBtn.textContent = "Nhận diện ảnh khác";
     } catch (error) {
         alert('Lỗi kết nối tới Backend Python!');
         loading.classList.add('hidden'); analyzeBtn.classList.remove('hidden');
+    }
+});
+
+// Nút Báo cáo nhận diện sai
+document.getElementById('btn-report-wrong').addEventListener('click', () => {
+    document.getElementById('report-success-msg').classList.remove('hidden');
+    setTimeout(() => {
+        document.getElementById('report-success-msg').classList.add('hidden');
+    }, 3000);
+});
+
+// Nút Hỏi cá này có hợp không
+document.getElementById('btn-ask-expert').addEventListener('click', async () => {
+    if(!currentYoloData) return;
+    
+    // Mở khóa Box Phân tích sinh thái
+    document.getElementById('ecological-analysis-box').classList.remove('hidden');
+    
+    // Render dữ liệu sinh thái
+    renderTuVan(currentYoloData.chi_tiet, currentYoloData.tu_van);
+    
+    // Nếu cá KHÔNG HỢP, tự động gọi API lấy 3 Gợi ý cá thay thế
+    if (!currentYoloData.chi_tiet.an_toan_tong_the) {
+        const altBox = document.getElementById('alternative-suggestion-box');
+        const altList = document.getElementById('alt-suggestion-list');
+        altBox.classList.remove('hidden');
+        altList.innerHTML = '<li><i class="fa-solid fa-spinner fa-spin"></i> AI đang phân tích dữ liệu 21 loài cá...</li>';
+        
+        try {
+            const res = await fetch('http://localhost:8000/api/ai_goi_y');
+            const suggestions = await res.json();
+            altList.innerHTML = '';
+            
+            if(suggestions.length > 0) {
+                suggestions.forEach(item => {
+                    altList.innerHTML += `<li><b>${item.ten_hien_thi}</b>: Tương thích ${item.diem_phu_hop}%. ${item.ly_do}</li>`;
+                });
+            } else {
+                altList.innerHTML = '<li>Rất tiếc, hồ của bạn hiện đã quá tải, không thể thả thêm bất kỳ loài cá nào.</li>';
+            }
+        } catch (e) {
+            altList.innerHTML = '<li>Lỗi khi tải gợi ý từ Server.</li>';
+        }
+    } else {
+        document.getElementById('alternative-suggestion-box').classList.add('hidden');
     }
 });
 
@@ -120,20 +171,55 @@ document.getElementById('manual-analyze-btn').addEventListener('click', async ()
         const data = await response.json();
         
         if (data.id_loai_ca === null) {
-            alert(data.loi_khuyen);
-            loading.classList.add('hidden'); document.getElementById('manual-analyze-btn').classList.remove('hidden');
+            document.getElementById('fish-not-found-block').classList.remove('hidden');
+            document.getElementById('missing-fish-name').textContent = ma_loai_ca;
+            loading.classList.add('hidden'); 
+            document.getElementById('manual-analyze-btn').classList.remove('hidden');
             return;
         }
+        
+        // Ẩn bảng báo lỗi nếu tìm thấy cá
+        document.getElementById('fish-not-found-block').classList.add('hidden');
         
         // Render Báo cáo Tương thích
         renderTuVan(data, data.loi_khuyen);
 
-        loading.classList.add('hidden'); resultSection.classList.remove('hidden');
+        loading.classList.add('hidden'); 
+        resultSection.classList.remove('hidden');
+        document.getElementById('ecological-analysis-box').classList.remove('hidden');
         document.getElementById('manual-analyze-btn').classList.remove('hidden');
     } catch (error) {
         alert('Lỗi kết nối tới Backend Python!');
         loading.classList.add('hidden'); document.getElementById('manual-analyze-btn').classList.remove('hidden');
     }
+});
+
+// Gửi yêu cầu cập nhật cá cho Admin (Mở form xác nhận)
+document.getElementById('btn-request-fish').addEventListener('click', () => {
+    document.getElementById('btn-request-fish').classList.add('hidden');
+    document.getElementById('fish-request-form').classList.remove('hidden');
+    document.getElementById('request-confirm-btns').style.display = 'flex';
+    document.getElementById('request-details').classList.add('hidden');
+    document.getElementById('request-success-msg').classList.add('hidden');
+});
+
+// Nút Hủy bỏ (Quay lại)
+document.getElementById('btn-confirm-no').addEventListener('click', () => {
+    document.getElementById('fish-request-form').classList.add('hidden');
+    document.getElementById('btn-request-fish').classList.remove('hidden');
+});
+
+// Nút Chắc chắn (Mở form điền chi tiết)
+document.getElementById('btn-confirm-yes').addEventListener('click', () => {
+    document.getElementById('request-confirm-btns').style.display = 'none';
+    document.getElementById('request-details').classList.remove('hidden');
+});
+
+// Nút Gửi thông tin cho Admin (Hoàn tất)
+document.getElementById('btn-submit-request').addEventListener('click', () => {
+    // Ở bản thực tế có thể gọi fetch() API để upload file ảnh và text lên server
+    document.getElementById('fish-request-form').classList.add('hidden');
+    document.getElementById('request-success-msg').classList.remove('hidden');
 });
 
 // Hàm dùng chung để in ra Báo cáo chi tiết 3 tiêu chí
@@ -145,7 +231,13 @@ function renderTuVan(chi_tiet, loi_khuyen_tong_the) {
         const el = document.getElementById(id);
         if (el) {
             el.innerHTML = text;
-            el.className = text.includes("Nguy hiểm") || text.includes("Xung đột") || text.includes("Không an toàn") ? "text-red" : "text-green";
+            if (text.includes("🔴") || text.includes("Nguy hiểm") || text.includes("Xung đột") || text.includes("Không an toàn")) {
+                el.className = "text-red";
+            } else if (text.includes("🟡") || text.includes("Cảnh báo") || text.includes("Nuôi đông")) {
+                el.className = "text-yellow";
+            } else {
+                el.className = "text-green";
+            }
         }
     };
 
@@ -160,9 +252,71 @@ function renderTuVan(chi_tiet, loi_khuyen_tong_the) {
     }
     
     setHtml('res-detail', `Nhiệt độ: ${chi_tiet.chi_tiet_nhiet} <br> Độ pH: ${chi_tiet.chi_tiet_ph}`);
+    setHtml('res-detail-temp', chi_tiet.chi_tiet_nhiet);
+    setHtml('res-detail-ph', chi_tiet.chi_tiet_ph);
     setHtml('res-detail-group', chi_tiet.chi_tiet_bay_dan);
+    setHtml('res-detail-group-2', chi_tiet.chi_tiet_bay_dan);
     setHtml('res-detail-capacity', chi_tiet.chi_tiet_mat_do || "Không rõ");
+    setHtml('res-detail-water-column', chi_tiet.chi_tiet_tang_boi || "Không rõ");
+    
+    // Tự động Gợi ý cá thay thế nếu không hợp
+    const altBox = document.getElementById('alternative-suggestion-box');
+    const altList = document.getElementById('alt-suggestion-list');
+    if (altBox && altList) {
+        if (!chi_tiet.an_toan_tong_the) {
+            altBox.classList.remove('hidden');
+            altList.innerHTML = '<li><i class="fa-solid fa-spinner fa-spin"></i> Đang tìm loài cá thay thế phù hợp nhất...</li>';
+            fetch('http://localhost:8000/api/ai_goi_y')
+                .then(res => res.json())
+                .then(data => {
+                    altList.innerHTML = '';
+                    if (data.length === 0) {
+                        altList.innerHTML = '<li>Rất tiếc, hồ của bạn hiện tại quá tải hoặc thông số quá khắc nghiệt, chưa có loài cá nào phù hợp để nuôi thêm.</li>';
+                    } else {
+                        data.forEach(item => {
+                            altList.innerHTML += `<li><b>${item.ten_hien_thi}</b>: Phù hợp ${item.diem_phu_hop}%. ${item.ly_do}</li>`;
+                        });
+                    }
+                })
+                .catch(() => {
+                    altList.innerHTML = '<li>Không thể tải danh sách gợi ý.</li>';
+                });
+        } else {
+            altBox.classList.add('hidden');
+        }
+    }
 }
+
+// ---- LOGIC AI GỢI Ý CÁ (MỚI) ----
+document.getElementById('ai-suggest-btn').addEventListener('click', async () => {
+    const loading = document.getElementById('loading');
+    const suggestBox = document.getElementById('ai-suggestion-box');
+    const suggestList = document.getElementById('ai-suggestion-list');
+    
+    loading.classList.remove('hidden');
+    suggestBox.classList.add('hidden');
+    
+    try {
+        const response = await fetch('http://localhost:8000/api/ai_goi_y');
+        if (!response.ok) throw new Error('Lỗi Server');
+        const data = await response.json();
+        
+        suggestList.innerHTML = '';
+        if (data.length === 0) {
+            suggestList.innerHTML = '<li>Không tìm thấy loài cá nào phù hợp lúc này (Hồ có thể đã quá tải hoặc điều kiện quá khắc nghiệt).</li>';
+        } else {
+            data.forEach(item => {
+                suggestList.innerHTML += `<li><b>${item.ten_hien_thi}</b>: Tương thích ${item.diem_phu_hop}%. ${item.ly_do}</li>`;
+            });
+        }
+        
+        loading.classList.add('hidden');
+        suggestBox.classList.remove('hidden');
+    } catch (error) {
+        alert('Lỗi khi gọi AI gợi ý!');
+        loading.classList.add('hidden');
+    }
+});
 
 // ---- LOGIC BIỂU ĐỒ TỔNG QUAN ----
 // ---- LOGIC BIỂU ĐỒ TỔNG QUAN ----
@@ -375,6 +529,8 @@ async function loadSettings() {
             document.getElementById('set-tank-l').value = data.chieu_dai || 60;
             document.getElementById('set-tank-w').value = data.chieu_rong || 40;
             document.getElementById('set-tank-h').value = data.chieu_cao || 40;
+            if(data.loai_loc) document.getElementById('set-filter-type').value = data.loai_loc;
+            if(data.co_cay_thuy_sinh !== undefined) document.getElementById('set-live-plants').checked = Boolean(data.co_cay_thuy_sinh);
             calcVolume();
             
             document.getElementById('set-che-do-den').value = data.che_do_den;
@@ -424,6 +580,8 @@ async function saveSettings() {
         chieu_dai: parseFloat(document.getElementById('set-tank-l').value) || 60,
         chieu_rong: parseFloat(document.getElementById('set-tank-w').value) || 40,
         chieu_cao: parseFloat(document.getElementById('set-tank-h').value) || 40,
+        loai_loc: document.getElementById('set-filter-type').value || 'Thác',
+        co_cay_thuy_sinh: document.getElementById('set-live-plants').checked,
         
         chu_ky_gui_data: parseInt(document.getElementById('set-chu-ky').value) || 60,
         
