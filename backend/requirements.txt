@@ -8,3 +8,5 @@ python-dotenv==1.0.0
 ultralytics
 numpy
 scikit-fuzzy
+scipy
+opencv-python-headless
