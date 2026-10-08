@@ -7,7 +7,7 @@ import os
 # ============================================================
 # - Điền "LOCAL" nếu bạn muốn test trên máy tính (XAMPP).
 # - Điền "ONLINE" nếu bạn muốn dùng Database trên mạng (Clever Cloud).
-CHE_DO_CHAY = "ONLINE"
+CHE_DO_CHAY = "LOCAL"
 
 # 1. Cấu hình Database ở máy cá nhân (XAMPP)
 DB_LOCAL = {

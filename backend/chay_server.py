@@ -950,6 +950,8 @@ def on_message(client, userdata, msg):
                     mqtt_client.publish("hoca_test/commands", "ALARM_OFF")
 
             conn.commit()
+        except Exception as inner_e:
+            print("Lỗi MySQL trong lúc ghi MQTT:", inner_e)
     except Exception as e:
         print("Lỗi phân tích dữ liệu MQTT:", e)
     finally:
