@@ -30,7 +30,21 @@ def kiem_tra_server():
 @app.get("/api/khoi_tao_db")
 def api_khoi_tao_db():
     conn = lay_ket_noi()
-    if not conn: return {"error": "Không kết nối được Clever Cloud"}
+    if not conn: 
+        # Cố gắng bắt lỗi cụ thể
+        try:
+            import os
+            import mysql.connector
+            test_conn = mysql.connector.connect(
+                host=os.getenv("DB_HOST", "localhost"),
+                user=os.getenv("DB_USER", "root"),
+                password=os.getenv("DB_PASSWORD", ""), 
+                database=os.getenv("DB_NAME", "he_thong_ho_ca")
+            )
+            test_conn.close()
+            return {"error": "Lỗi Pool nhưng kết nối trực tiếp được"}
+        except Exception as ex:
+            return {"error": f"Lỗi thực tế: {str(ex)}"}
     try:
         cursor = conn.cursor()
         # Tạo bảng Cài đặt
