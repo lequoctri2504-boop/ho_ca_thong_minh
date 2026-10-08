@@ -555,7 +555,7 @@ def api_cam_bien_moi_nhat():
     conn = lay_ket_noi()
     if not conn: return {}
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT nhiet_do, do_ph, muc_nuoc FROM du_lieu_cam_bien ORDER BY id DESC LIMIT 1")
+    cursor.execute("SELECT nhiet_do, do_ph, muc_nuoc, thoi_gian_tao FROM du_lieu_cam_bien ORDER BY id DESC LIMIT 1")
     data = cursor.fetchone()
     
     cursor.execute("SELECT * FROM cai_dat_ho WHERE id = 1")
@@ -564,6 +564,9 @@ def api_cam_bien_moi_nhat():
     conn.close()
     
     if not data: return {"nhiet_do": 0, "do_ph": 0, "muc_nuoc": 0, "canh_bao": []}
+    
+    if 'thoi_gian_tao' in data and data['thoi_gian_tao']:
+        data['thoi_gian_tao'] = data['thoi_gian_tao'].strftime("%Y-%m-%d %H:%M:%S")
     
     canh_bao = []
     if cai_dat:
@@ -845,38 +848,34 @@ def on_message(client, userdata, msg):
         data = json.loads(payload)
         conn = lay_ket_noi()
         if not conn: return
-        cursor = conn.cursor(dictionary=True)
-        
-        # 1. Nếu là bản tin trạng thái nút bấm (Đèn/Bơm/Bơm Xả/Bơm Cấp)
-        if topic == "hoca_test/status":
-            den = data.get('trang_thai_den', 0)
-            bom = data.get('trang_thai_bom', 0)
-            bom_xa = data.get('trang_thai_bom_xa', 0)
-            bom_cap = data.get('trang_thai_bom_cap', 0)
-            relay_5 = data.get('trang_thai_relay_5', 0)
-            cursor.execute("UPDATE cai_dat_ho SET trang_thai_den=%s, trang_thai_bom=%s, trang_thai_bom_xa=%s, trang_thai_bom_cap=%s, trang_thai_relay_5=%s WHERE id=1", (den, bom, bom_xa, bom_cap, relay_5))
-            conn.commit()
-            cursor.close(); conn.close()
-            return
-
-        # 2. Xử lý yêu cầu xin cấu hình từ ESP32 khi vừa khởi động
-        if data.get('request') == 'GET_CONFIG':
-            cursor.execute("SELECT sieu_am_day, sieu_am_tran FROM cai_dat_ho WHERE id=1")
-            cd = cursor.fetchone()
-            if cd:
-                mqtt_client.publish("hoca_test/commands", f"CFG_W_{cd['sieu_am_day']}_{cd['sieu_am_tran']}")
-            cursor.close(); conn.close()
-            return
-            
-        # 3. Nếu là bản tin cảm biến định kỳ
-        nhiet_do = data.get('nhiet_do', 0)
-        do_ph = data.get('do_ph', 0)
-        khoang_cach_do_duoc = data.get('muc_nuoc', 0) # Bản mới ESP32 gửi cm thô
-        
-        # Lưu vào MySQL
-        conn = lay_ket_noi()
-        if conn:
+        try:
             cursor = conn.cursor(dictionary=True)
+            
+            # 1. Nếu là bản tin trạng thái nút bấm (Đèn/Bơm/Bơm Xả/Bơm Cấp)
+            if topic == "hoca_test/status":
+                den = data.get('trang_thai_den', 0)
+                bom = data.get('trang_thai_bom', 0)
+                bom_xa = data.get('trang_thai_bom_xa', 0)
+                bom_cap = data.get('trang_thai_bom_cap', 0)
+                relay_5 = data.get('trang_thai_relay_5', 0)
+                cursor.execute("UPDATE cai_dat_ho SET trang_thai_den=%s, trang_thai_bom=%s, trang_thai_bom_xa=%s, trang_thai_bom_cap=%s, trang_thai_relay_5=%s WHERE id=1", (den, bom, bom_xa, bom_cap, relay_5))
+                conn.commit()
+                return
+    
+            # 2. Xử lý yêu cầu xin cấu hình từ ESP32 khi vừa khởi động
+            if data.get('request') == 'GET_CONFIG':
+                cursor.execute("SELECT sieu_am_day, sieu_am_tran FROM cai_dat_ho WHERE id=1")
+                cd = cursor.fetchone()
+                if cd:
+                    mqtt_client.publish("hoca_test/commands", f"CFG_W_{cd['sieu_am_day']}_{cd['sieu_am_tran']}")
+                return
+                
+            # 3. Nếu là bản tin cảm biến định kỳ
+            nhiet_do = data.get('nhiet_do', 0)
+            do_ph = data.get('do_ph', 0)
+            khoang_cach_do_duoc = data.get('muc_nuoc', 0) # Bản mới ESP32 gửi cm thô
+            
+            # Đọc cài đặt hồ để quy đổi phần trăm
             cursor.execute("SELECT * FROM cai_dat_ho WHERE id = 1")
             cai_dat = cursor.fetchone()
             
