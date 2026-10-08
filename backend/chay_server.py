@@ -27,6 +27,70 @@ app.add_middleware(
 def kiem_tra_server():
     return {"thong_bao": "Server FastAPI dang hoat dong tot!"}
 
+@app.get("/api/khoi_tao_db")
+def api_khoi_tao_db():
+    conn = lay_ket_noi()
+    if not conn: return {"error": "Không kết nối được Clever Cloud"}
+    try:
+        cursor = conn.cursor()
+        # Tạo bảng Cài đặt
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS cai_dat_ho (
+            id INT PRIMARY KEY,
+            nhiet_do_min FLOAT DEFAULT 24.0, nhiet_do_max FLOAT DEFAULT 28.0,
+            ph_min FLOAT DEFAULT 6.5, ph_max FLOAT DEFAULT 7.5,
+            muc_nuoc_min FLOAT DEFAULT 30.0,
+            chieu_dai FLOAT DEFAULT 60.0, chieu_rong FLOAT DEFAULT 40.0, chieu_cao FLOAT DEFAULT 40.0,
+            loai_loc VARCHAR(50) DEFAULT 'lọc tràn', co_cay_thuy_sinh BOOLEAN DEFAULT FALSE,
+            chu_ky_gui_data INT DEFAULT 5000,
+            che_do_den VARCHAR(20) DEFAULT 'thu_cong', trang_thai_den BOOLEAN DEFAULT FALSE,
+            hen_gio_den_bat TIME, hen_gio_den_tat TIME, lich_den_thu VARCHAR(50),
+            che_do_bom VARCHAR(20) DEFAULT 'thu_cong', trang_thai_bom BOOLEAN DEFAULT FALSE,
+            hen_gio_bom_bat TIME, hen_gio_bom_tat TIME, lich_bom_thu VARCHAR(50),
+            sieu_am_day FLOAT DEFAULT 45.0, sieu_am_tran FLOAT DEFAULT 38.0,
+            phan_tram_thay FLOAT DEFAULT 20.0, lich_thay_nuoc_gio TIME, lich_thay_nuoc_thu VARCHAR(50),
+            dang_thay_nuoc BOOLEAN DEFAULT FALSE, muc_tieu_xa FLOAT DEFAULT 0.0,
+            trang_thai_bom_xa BOOLEAN DEFAULT FALSE, trang_thai_bom_cap BOOLEAN DEFAULT FALSE,
+            trang_thai_relay_5 BOOLEAN DEFAULT FALSE
+        )
+        """)
+        # Tạo bảng Dữ liệu cảm biến
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS du_lieu_cam_bien (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            nhiet_do FLOAT, do_ph FLOAT, muc_nuoc FLOAT,
+            thoi_gian_tao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
+        # Tạo bảng Cá
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS danh_sach_ca (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            ten_ca VARCHAR(100), so_luong INT
+        )
+        """)
+        # Tạo bảng Cảnh báo
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS lich_su_canh_bao (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            loai_canh_bao VARCHAR(50), noi_dung TEXT,
+            thoi_gian_tao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
+        
+        # Chèn dòng cấu hình mặc định nếu chưa có
+        cursor.execute("SELECT id FROM cai_dat_ho WHERE id=1")
+        if not cursor.fetchone():
+            cursor.execute("INSERT INTO cai_dat_ho (id) VALUES (1)")
+            
+        conn.commit()
+        return {"message": "KHỞI TẠO DATABASE THÀNH CÔNG! HỆ THỐNG ĐÃ SẴN SÀNG."}
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        cursor.close()
+        conn.close()
+
 @app.post("/api/nhan_dien_anh")
 async def api_nhan_dien(anh_upload: UploadFile = File(...)):
     os.makedirs("uploads", exist_ok=True)
