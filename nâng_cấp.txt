@@ -30,3 +30,36 @@ Mở rộng: Tương lai, nếu muốn thêm Nghiệp vụ "Gửi tin nhắn Zal
 Tính mở rộng của AI: Flow AI hiện tại nhận diện ảnh cá -> Trả về ID cá.
 
 Mở rộng: Chỗ này là một module độc lập. Tương lai có thể nâng cấp AI thành "Nhận diện bệnh của cá qua camera", tái sử dụng lại toàn bộ luồng đẩy ảnh lên server hiện có.
+
+
+
+
+-------------xịn--------
+Hướng 1: Tích hợp ngay trên giao diện Web (Chỉ tốn khoảng 30 phút code)
+Bạn chỉ cần thêm một nút hình "Microphone" trên Web. Khi bấm vào nói, điện thoại sẽ bắt giọng nói của bạn.
+
+Dùng thư viện Web Speech API (có sẵn miễn phí trong các trình duyệt Chrome/Safari trên điện thoại). Trình duyệt sẽ tự động dịch giọng nói của bạn thành chữ (Ví dụ bạn nói: "Bật đèn lên" -> nó dịch ra chuỗi "Bật đèn lên").
+Ở file script.js, bạn chỉ cần viết 1 đoạn if-else đơn giản: Nếu chuỗi có chữ "bật" và "đèn" -> Gọi lại đúng cái hàm bật đèn y như lúc bạn bấm nút gạt.
+Ưu điểm: Tự code 100%, tích hợp thẳng vào Web của bạn, không phụ thuộc app thứ 3.
+Hướng 2: Kết nối với Google Assistant / Siri (Đọc lệnh như Iron Man)
+Thay vì mở Web lên bấm, bạn chỉ cần cầm điện thoại lên, nói "Ok Google, turn on Aquarium Light", đèn sẽ tự bật.
+
+Vì mạch ESP32 của bạn đang xài MQTT, bạn chỉ cần dùng một dịch vụ làm cầu nối miễn phí như IFTTT hoặc Adafruit IO.
+Bạn liên kết tài khoản Google Assistant với IFTTT. Cấu hình trên web IFTTT: "Nếu tôi nói 'Bật đèn hồ cá' -> thì bắn lệnh 'DEN_ON' xuống kênh MQTT hoca_test/commands".
+Ưu điểm: Rất "ngầu", điều khiển được kể cả khi không mở app, hệ thống ESP32 tự động nhận lệnh từ MQTT mà Backend Python thậm chí không cần quan tâm. Không cần viết thêm code cho vi điều khiển ESP32 luôn!
+Cả 2 cách trên đều rất khả thi và là tính năng "ăn điểm" tuyệt đối nếu hội đồng chấm luận văn nhìn thấy. Nếu lúc nào bạn rảnh rỗi muốn làm thử, tôi sẽ hướng dẫn bạn viết code cho Hướng 1 nhé, rất thú vị đấy!
+------------
+
+
+
+
+------------ TÍCH HỢP AI CHATBOT TƯ VẤN (RAG + OLLAMA) ------------
+Lý do chọn model "qwen2.5:3b" cho đồ án Hồ cá:
+
+1. Phù hợp hoàn hảo với phần cứng máy tính hiện tại (GPU 4GB VRAM):
+- Qwen2.5:3b nặng khoảng 1.9GB, chạy lọt thỏm 100% trong Card màn hình 4GB. Nhờ vậy, tốc độ gõ chữ trả lời của AI cực kỳ nhanh và mượt.
+- Ngược lại, nếu dùng model to hơn, bộ nhớ sẽ bị tràn ra RAM máy tính, làm tốc độ phản hồi AI bị chậm đi đáng kể.
+
+2. So sánh với các mô hình cùng phân khúc (như Google Gemma 2:2B hay Meta Llama 3:8B):
+- ƯU ĐIỂM BÁ ĐẠO: Tiếng Việt tự nhiên nhất hiện nay. Các model khác thường mắc lỗi chêm từ tiếng Anh hoặc hành văn kiểu "Google Dịch". Đặc biệt, khả năng Đọc hiểu thông số (RAG) của Qwen2.5 cực kỳ bén, đưa số liệu Nhiệt độ/pH nào là nó bám sát số đó để tư vấn, hiếm khi bị "ảo giác" (chém gió sai lệch).
+- NHƯỢC ĐIỂM: Do kích thước nhỏ (3 tỷ tham số), nếu hỏi nó các kiến thức xã hội vĩ mô, nó sẽ kém thông minh hơn các model to. Tuy nhiên, đối với luận văn hồ cá (chỉ tập trung tư vấn sinh thái dựa trên dữ liệu RAG mớm vào), thì nhược điểm này hoàn toàn không ảnh hưởng.

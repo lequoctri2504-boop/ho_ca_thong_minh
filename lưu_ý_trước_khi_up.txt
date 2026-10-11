@@ -1,0 +1,49 @@
+CẨM NANG: NHỮNG VIỆC CẦN LÀM KHI UP DỰ ÁN LÊN MẠNG INTERNET
+(Lưu ý: Chỉ làm các bước này khi bạn đã sẵn sàng nộp đồ án hoặc úp lên mạng thật)
+
+---------------------------------------------------
+BƯỚC 1: UP DATABASE (CƠ SỞ DỮ LIỆU) LÊN MẠNG
+---------------------------------------------------
+1. Tạo tài khoản trên Aiven.io (miễn phí) và tạo 1 cái MySQL Service.
+2. Lấy các thông số host, user, password của Aiven.
+3. Xuất file database trên máy tính của bạn (.sql) và import lên Aiven.
+4. Mở file `backend/.env` trên máy tính và ĐỔI THÔNG TIN thành thông số của Aiven.
+   Ví dụ:
+   DB_HOST=mysql-của-aiven.aivencloud.com
+   DB_USER=avnadmin
+   DB_PASSWORD=mat-khau-bi-mat
+   DB_NAME=he_thong_ho_ca
+
+---------------------------------------------------
+BƯỚC 2: UP BACKEND (AI + MQTT) LÊN HUGGING FACE
+---------------------------------------------------
+1. Tạo tài khoản Hugging Face (huggingface.co).
+2. Tạo 1 "Space" mới -> Chọn loại "Docker" -> Blank.
+3. Upload toàn bộ thư mục `backend` của bạn vào đó (chỉ Kéo - Thả).
+   - Hãy chắc chắn đã thả file `best.pt` vào đó nhé.
+   - Khi đó, Hugging Face sẽ tự động đọc file `Dockerfile` và `requirements.txt` mà tôi đã tạo sẵn. Nó cũng sẽ tự ép mở cổng 7860 nên bạn KHÔNG CẦN SỬA file `chay_server.py`.
+4. Chờ 5-10 phút cho máy chủ khởi động (Build). Khi thấy chữ "Running" màu xanh lá là thành công!
+5. Bạn sẽ được cấp 1 đường link API thật. Copy đường link đó lại (Ví dụ: https://tencuaban-hoca.hf.space).
+
+---------------------------------------------------
+BƯỚC 3: UP FRONTEND (GIAO DIỆN WEB) LÊN VERCEL
+---------------------------------------------------
+1. Trước khi up lên, mở file `frontend/script.js` và `frontend/admin.js` ra.
+2. Nhìn lên trên cùng (Dòng 1 đến 5).
+3. Đóng (thêm comment //) vào link localhost. Và mở (bỏ comment //) ở cái link server mạng.
+   Ví dụ trước khi sửa (Test ở nhà):
+      const API_BASE_URL = 'http://localhost:8000';
+      // const API_BASE_URL = 'https://dia-chi-server-cua-ban.com';
+      
+   Sửa thành thế này (Để đưa lên mạng):
+      // const API_BASE_URL = 'http://localhost:8000';
+      const API_BASE_URL = 'https://tencuaban-hoca.hf.space'; (Dán cái link API bạn copy ở BƯỚC 2 vào đây)
+
+4. Lưu lại 2 file JS.
+5. Nén thư mục `frontend` đẩy lên GitHub (hoặc kéo thả trực tiếp lên Vercel/Netlify).
+6. Xong! Bạn sẽ có link web chính thức để xài trên điện thoại mọi lúc mọi nơi.
+
+---------------------------------------------------
+BƯỚC 4 (TÙY CHỌN): ESP32
+---------------------------------------------------
+Nếu lúc nãy bạn chưa sửa phần ESP32 thì hãy mở file `cần_xử_lý.txt` ra đọc lại, đổi MQTT Client ID và đổi Topic nếu cần thiết để hệ thống hoạt động không bị nhiễu sóng với người khác.

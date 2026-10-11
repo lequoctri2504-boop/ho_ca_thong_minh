@@ -129,3 +129,21 @@ input:checked + .slider:before { transform: translateX(36px); }
 .styled-table th, .styled-table td { padding: 15px 20px; }
 .styled-table tbody tr { border-bottom: 1px solid var(--glass-border); transition: 0.2s; }
 .styled-table tbody tr:hover { background-color: rgba(255,255,255,0.02); }
+
+/* Giao diện Chatbot AI */
+#ai-chat-widget { position: fixed; bottom: 30px; right: 30px; z-index: 9999; }
+#ai-chat-btn { background: linear-gradient(135deg, var(--secondary), var(--primary)); color: white; border: none; padding: 15px 25px; border-radius: 30px; font-size: 16px; cursor: pointer; box-shadow: 0 4px 15px rgba(0,242,254,0.4); font-weight: bold; transition: 0.3s; }
+#ai-chat-btn:hover { transform: translateY(-3px); }
+#ai-chat-box { width: 380px; height: 500px; background: var(--dark-bg); border: 1px solid var(--primary); border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; flex-direction: column; overflow: hidden; margin-bottom: 15px; }
+#ai-chat-box.hidden { display: none !important; }
+.ai-chat-header { background: linear-gradient(135deg, var(--secondary), var(--primary)); color: white; padding: 15px; display: flex; justify-content: space-between; font-weight: bold; font-size: 1.1rem; }
+.ai-chat-header button { background: none; border: none; color: white; cursor: pointer; font-size: 18px; }
+#ai-chat-messages { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; background: rgba(0,0,0,0.3); }
+.message { max-width: 85%; padding: 12px; border-radius: 12px; font-size: 0.95rem; line-height: 1.4; word-wrap: break-word; }
+.ai-msg { background: rgba(255,255,255,0.1); align-self: flex-start; border-bottom-left-radius: 2px; border: 1px solid rgba(255,255,255,0.05); }
+.user-msg { background: var(--primary); color: #000; align-self: flex-end; border-bottom-right-radius: 2px; font-weight: 500; }
+.ai-chat-input { display: flex; padding: 15px; border-top: 1px solid rgba(255,255,255,0.1); background: var(--dark-bg); }
+.ai-chat-input input { flex: 1; padding: 12px 15px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 20px; outline: none; transition: 0.3s; }
+.ai-chat-input input:focus { border-color: var(--primary); }
+.ai-chat-input button { background: var(--primary); border: none; color: #000; width: 40px; height: 40px; border-radius: 50%; margin-left: 10px; cursor: pointer; font-size: 1.1rem; transition: 0.3s; }
+.ai-chat-input button:hover { transform: scale(1.1); box-shadow: 0 0 10px var(--primary); }

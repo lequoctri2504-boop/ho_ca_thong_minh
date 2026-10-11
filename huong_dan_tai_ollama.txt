@@ -1,0 +1,56 @@
+========================================================================
+HƯỚNG DẪN CHI TIẾT: CÀI ĐẶT VÀ TÍCH HỢP OLLAMA (RAG) VÀO ĐỒ ÁN HỒ CÁ
+========================================================================
+
+Phần 1: OLLAMA LÀ GÌ VÀ TẠI SAO LẠI DÙNG NÓ?
+- Thay vì bạn phải bỏ tiền mua API của ChatGPT và bắt buộc phải có kết nối mạng quốc tế, Ollama giúp bạn tải hẳn "bộ não" của AI về chạy trực tiếp trên máy tính cá nhân.
+- Lợi ích: Miễn phí 100%, bảo mật dữ liệu, không lo rớt mạng, tốc độ siêu nhanh (nếu máy có Card màn hình).
+- Model được chọn: "qwen2.5:3b" (Của Alibaba) vì nó nói Tiếng Việt cực chuẩn, dung lượng nhẹ (1.9GB), vừa khít với Card màn hình 4GB của bạn.
+
+------------------------------------------------------------------------
+Phần 2: CÁC BƯỚC CÀI ĐẶT OLLAMA (BẠN TỰ LÀM)
+1. Tải phần mềm:
+   - Truy cập trang chủ: https://ollama.com/
+   - Bấm nút "Download", tải bản dành cho Windows.
+   - Cài đặt như mọi phần mềm bình thường (Cứ Next là xong).
+   - Sau khi cài, dưới góc phải màn hình (khay hệ thống) sẽ có biểu tượng con Llama trắng.
+
+2. Tải bộ não AI (Qwen 2.5):
+   - Mở Command Prompt (CMD) hoặc PowerShell trên Windows.
+   - Copy và dán dòng lệnh sau rồi ấn Enter:
+     ollama run qwen2.5:3b
+   - Máy sẽ bắt đầu tải model nặng 1.9GB về. Bạn chờ khoảng vài phút.
+
+3. Chat thử với AI:
+   - Tải xong, màn hình đen CMD sẽ hiện ra dấu >>> 
+   - Bạn gõ thử: "Bạn biết gì về cá La Hán?"
+   - Nếu nó trả lời rành mạch bằng tiếng Việt -> Chúc mừng, máy bạn đã cài xong AI!
+   - (Để thoát cửa sổ chat này, gõ /bye rồi Enter).
+
+------------------------------------------------------------------------
+Phần 3: ỨNG DỤNG VÀ RÁP VÀO LUẬN VĂN THẾ NÀO (TÔI SẼ CODE CÙNG BẠN)
+
+Hệ thống RAG (Retrieval-Augmented Generation) sẽ hoạt động theo quy trình 4 bước sau:
+
+Bước 1 (Retrieval - Lấy dữ liệu thực): 
+Khi người dùng nhắn 1 câu hỏi trên Web, thay vì trả lời ngay, Backend Python của chúng ta sẽ vào thẳng MySQL lấy Nhiệt độ, độ pH hiện tại của hồ cá.
+
+Bước 2 (Prompt Engineering - Trộn dữ liệu):
+Python tự động ghép thêm dữ liệu vào câu hỏi của người dùng. 
+Ví dụ, người dùng gõ: "Nước dạo này hồ tôi thả thêm cá dĩa được không?"
+Python sẽ lén ghép thành: "Bạn là chuyên gia thủy sinh. Nhiệt độ hồ đang là 30 độ, pH 7.5. Khách hỏi: Nước dạo này hồ tôi thả thêm cá dĩa được không?"
+
+Bước 3 (Gửi cho Ollama):
+Python gửi câu đã ghép ở Bước 2 đến cái cổng bí mật của Ollama đang chạy ngầm trên máy bạn (http://localhost:11434/api/generate). 
+
+Bước 4 (Trả kết quả):
+Ollama đọc ngữ cảnh, thấy nhiệt độ 30 độ và hiểu rằng cá Dĩa hợp nước ấm. Nó sẽ trả lời "Rất phù hợp...". Python nhận câu này và đẩy lên giao diện Web cho người dùng xem.
+
+------------------------------------------------------------------------
+Phần 4: LỘ TRÌNH CHÚNG TA SẼ CODE KẾT NỐI
+
+Sau khi bạn đã hoàn thành Phần 2 (Tải Ollama xong), hãy nhắn lại cho tôi. Chúng ta sẽ làm lần lượt:
+1. Sửa file `chay_server.py`: Viết 1 API tên là `/api/chat_tu_van`. Bên trong API này tôi sẽ viết logic RAG kết nối CSDL và kết nối với Ollama.
+2. Sửa file `script.js` và `index.html`: Tạo 1 nút bấm hình con Robot ở góc màn hình. Bấm vào mở ra 1 cái khung Chatbox y hệt như Zalo/Messenger để người dùng gõ câu hỏi.
+
+Bạn hãy mở CMD lên và chạy lệnh tải ngay nhé! Cứ làm từ từ, làm nào chắc đó!

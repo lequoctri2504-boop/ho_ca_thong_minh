@@ -179,7 +179,7 @@
                                 </li>
                                 <li>
                                     <i class="fa-solid fa-fish text-green"></i> 
-                                    <span>Cá trong hồ:</span> <b id="res-detail-group">---</b>
+                                    <span>Cá trong hồ:</span> <b id="res-detail-fish">---</b>
                                 </li>
                             </ul>
                         </div>
@@ -538,6 +538,24 @@
         <option value="Cá La Hán">
         <option value="Cá Chép Koi">
     </datalist>
+
+    <!-- KHUNG CHATBOT AI -->
+    <div id="ai-chat-widget">
+        <button id="ai-chat-btn" onclick="toggleAIChat()">💬 Trợ lý Sinh thái AI</button>
+        <div id="ai-chat-box" class="hidden">
+            <div class="ai-chat-header">
+                <span>🤖 Chuyên gia Thủy sinh</span>
+                <button onclick="toggleAIChat()">✖</button>
+            </div>
+            <div id="ai-chat-messages">
+                <div class="message ai-msg">Chào bạn! Tôi là chuyên gia sinh thái. Bạn cần tư vấn về loài cá nào cho hồ của bạn?</div>
+            </div>
+            <div class="ai-chat-input">
+                <input type="text" id="ai-chat-input-text" placeholder="Hỏi về cá, nước, môi trường..." onkeypress="if(event.key === 'Enter') sendAIChat()">
+                <button onclick="sendAIChat()"><i class="fa-solid fa-paper-plane"></i></button>
+            </div>
+        </div>
+    </div>
 
     <script src="script.js?v=4"></script>
 </body>

@@ -1,0 +1,16 @@
+DANH SÁCH CÁC VẤN ĐỀ CẦN XỬ LÝ KHI ÚP LÊN MẠNG CHO ESP32 (FIRMWARE)
+
+1. Lỗi trùng lặp MQTT Client ID (Mức độ: NGHIÊM TRỌNG)
+- Vị trí: File esp32_firmware.ino (dòng 175) -> client.connect("ESP32_HoCa_Client")
+- Vấn đề: Nếu dùng broker công cộng (broker.emqx.io), khi có thiết bị khác mang ID tương tự kết nối vào, ESP32 sẽ liên tục bị "đá" (disconnect) ra khỏi mạng. 
+- Cách giải quyết: Tạo Client ID độc nhất bằng cách nối chuỗi tên cố định với Địa chỉ MAC của chip WiFi (ví dụ: "ESP32_HoCa_" + WiFi.macAddress()).
+
+2. Tên Topic MQTT bị chung đụng (Mức độ: Vừa)
+- Vị trí: Dòng 17-19 (chữ "hoca_test/...")
+- Vấn đề: Tên topic quá phổ biến, dễ bị lẫn lộn dữ liệu hoặc bị người khác gửi nhầm lệnh tắt mở thiết bị trên mạng công cộng.
+- Cách giải quyết: Đổi tên topic thành một chuỗi độc nhất, ví dụ: "hoca_tri_than_xyz999/sensors". (Nhớ đổi đồng bộ trong code Python backend).
+
+3. Quản lý thông tin WiFi tĩnh (Mức độ: Thẩm mỹ/Tiện lợi)
+- Vị trí: Dòng 12-13 (ssid = "HOME", password = "...")
+- Vấn đề: Mỗi lần đổi mật khẩu WiFi ở nhà hoặc mang mô hình lên trường báo cáo/trưng bày, phải cắm cáp nạp lại code bằng máy tính. Rất bất tiện.
+- Cách giải quyết: Sử dụng thư viện WiFiManager. Mạch ESP32 sẽ phát ra mạng WiFi ảo tên "HoCa Setup" khi mất mạng, cho phép dùng điện thoại kết nối vào để nhập tên/mật khẩu WiFi mới trực tiếp từ giao diện web.

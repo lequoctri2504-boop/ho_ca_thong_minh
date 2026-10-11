@@ -11,8 +11,35 @@ import json
 import paho.mqtt.client as mqtt
 from apscheduler.schedulers.background import BackgroundScheduler
 import difflib
+import requests
+import logging
+import traceback
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
-app = FastAPI()
+# --- CẤU HÌNH LOGGING CHUYÊN NGHIỆP ---
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+logger = logging.getLogger("HoCaThongMinh")
+
+app = FastAPI(
+    title="Hệ thống Hồ cá Thông minh",
+    description="API quản lý hồ cá và tư vấn sinh thái bằng AI",
+    version="1.0.0"
+)
+
+# --- GLOBAL EXCEPTION HANDLER ---
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Lỗi Server (500) tại {request.url.path}: {str(exc)}")
+    logger.error(traceback.format_exc())
+    return JSONResponse(
+        status_code=500,
+        content={"error": "Lỗi hệ thống nội bộ. Vui lòng liên hệ Admin.", "details": str(exc)},
+    )
 
 # Bật tính năng CORS để Web có thể gửi request đến Server
 app.add_middleware(
@@ -26,6 +53,84 @@ app.add_middleware(
 @app.get("/")
 def kiem_tra_server():
     return {"thong_bao": "Server FastAPI dang hoat dong tot!"}
+
+@app.get("/api/khoi_tao_db")
+def api_khoi_tao_db():
+    conn = lay_ket_noi()
+    if not conn: 
+        # Cố gắng bắt lỗi cụ thể
+        try:
+            import os
+            import mysql.connector
+            test_conn = mysql.connector.connect(
+                host=os.getenv("DB_HOST", "localhost"),
+                user=os.getenv("DB_USER", "root"),
+                password=os.getenv("DB_PASSWORD", ""), 
+                database=os.getenv("DB_NAME", "he_thong_ho_ca")
+            )
+            test_conn.close()
+            return {"error": "Lỗi Pool nhưng kết nối trực tiếp được"}
+        except Exception as ex:
+            return {"error": f"Lỗi thực tế: {str(ex)}"}
+    try:
+        cursor = conn.cursor()
+        # Tạo bảng Cài đặt
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS cai_dat_ho (
+            id INT PRIMARY KEY,
+            nhiet_do_min FLOAT DEFAULT 24.0, nhiet_do_max FLOAT DEFAULT 28.0,
+            ph_min FLOAT DEFAULT 6.5, ph_max FLOAT DEFAULT 7.5,
+            muc_nuoc_min FLOAT DEFAULT 30.0,
+            chieu_dai FLOAT DEFAULT 60.0, chieu_rong FLOAT DEFAULT 40.0, chieu_cao FLOAT DEFAULT 40.0,
+            loai_loc VARCHAR(50) DEFAULT 'lọc tràn', co_cay_thuy_sinh BOOLEAN DEFAULT FALSE,
+            chu_ky_gui_data INT DEFAULT 5000,
+            che_do_den VARCHAR(20) DEFAULT 'thu_cong', trang_thai_den BOOLEAN DEFAULT FALSE,
+            hen_gio_den_bat TIME, hen_gio_den_tat TIME, lich_den_thu VARCHAR(50),
+            che_do_bom VARCHAR(20) DEFAULT 'thu_cong', trang_thai_bom BOOLEAN DEFAULT FALSE,
+            hen_gio_bom_bat TIME, hen_gio_bom_tat TIME, lich_bom_thu VARCHAR(50),
+            sieu_am_day FLOAT DEFAULT 45.0, sieu_am_tran FLOAT DEFAULT 38.0,
+            phan_tram_thay FLOAT DEFAULT 20.0, lich_thay_nuoc_gio TIME, lich_thay_nuoc_thu VARCHAR(50),
+            dang_thay_nuoc BOOLEAN DEFAULT FALSE, muc_tieu_xa FLOAT DEFAULT 0.0,
+            trang_thai_bom_xa BOOLEAN DEFAULT FALSE, trang_thai_bom_cap BOOLEAN DEFAULT FALSE,
+            trang_thai_relay_5 BOOLEAN DEFAULT FALSE
+        )
+        """)
+        # Tạo bảng Dữ liệu cảm biến
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS du_lieu_cam_bien (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            nhiet_do FLOAT, do_ph FLOAT, muc_nuoc FLOAT,
+            thoi_gian_tao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
+        # Tạo bảng Cá
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS danh_sach_ca (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            ten_ca VARCHAR(100), so_luong INT
+        )
+        """)
+        # Tạo bảng Cảnh báo
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS lich_su_canh_bao (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            loai_canh_bao VARCHAR(50), noi_dung TEXT,
+            thoi_gian_tao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
+        
+        # Chèn dòng cấu hình mặc định nếu chưa có
+        cursor.execute("SELECT id FROM cai_dat_ho WHERE id=1")
+        if not cursor.fetchone():
+            cursor.execute("INSERT INTO cai_dat_ho (id) VALUES (1)")
+            
+        conn.commit()
+        return {"message": "KHỞI TẠO DATABASE THÀNH CÔNG! HỆ THỐNG ĐÃ SẴN SÀNG."}
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        cursor.close()
+        conn.close()
 
 @app.post("/api/nhan_dien_anh")
 async def api_nhan_dien(anh_upload: UploadFile = File(...)):
@@ -74,7 +179,7 @@ def api_tu_van(ma_loai_ca: str, so_luong: int = 1):
         import traceback
         return {
             "id_loai_ca": None,
-            "loi_khuyen": f"Lỗi Python (Hãy chụp ảnh màn hình này gửi cho AI):\n{str(e)}\n{traceback.format_exc()}"
+            "loi_khuyen": f"Lỗi Python:\n{str(e)}\n{traceback.format_exc()}"
         }
 
 @app.get("/api/ai_goi_y")
@@ -106,6 +211,45 @@ def api_ai_goi_y():
     goi_y.sort(key=lambda x: x['diem_phu_hop'], reverse=True)
     return goi_y[:3]
 
+# --- API YÊU CẦU CẬP NHẬT CÁ MỚI ---
+class YeuCauCaRequest(BaseModel):
+    ten_ca: str
+
+@app.post("/api/yeu_cau_ca")
+def api_yeu_cau_ca(req: YeuCauCaRequest):
+    conn = lay_ket_noi()
+    cursor = conn.cursor()
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS yeu_cau_them_ca (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        ten_ca VARCHAR(100),
+        trang_thai VARCHAR(50) DEFAULT 'Đang chờ duyệt',
+        thoi_gian_tao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+    cursor.execute("INSERT INTO yeu_cau_them_ca (ten_ca) VALUES (%s)", (req.ten_ca,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return {"message": "Đã gửi yêu cầu thành công! Admin sẽ cập nhật sớm nhất có thể."}
+
+@app.get("/api/yeu_cau_ca")
+def api_lay_yeu_cau_ca():
+    conn = lay_ket_noi()
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM yeu_cau_them_ca ORDER BY id DESC LIMIT 10")
+        data = cursor.fetchall()
+        for row in data:
+            if row.get('thoi_gian_tao'):
+                row['thoi_gian_tao'] = row['thoi_gian_tao'].strftime("%d/%m/%Y %H:%M")
+        return data
+    except Exception:
+        return []
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if conn: conn.close()
+
 # --- HÀM LOGIC SIÊU TƯ VẤN 3 LỚP (MÔI TRƯỜNG - MẬT ĐỘ - XÃ HỘI) ---
 def tu_van_tuong_thich(ma_loai_ca, so_luong=1):
     conn = lay_ket_noi()
@@ -128,29 +272,37 @@ def tu_van_tuong_thich(ma_loai_ca, so_luong=1):
     danh_sach_db = cursor.fetchall()
     
     ca_moi = None
-    # 1. Chuẩn hóa chuỗi người dùng gõ
-    keyword = str(ma_loai_ca).strip().lower()
-    keyword = keyword.replace("7", "bảy").replace("3", "ba").replace("4", "tứ")
+    # 1. Chuẩn hóa chuỗi người dùng gõ (Loại bỏ dấu tiếng Việt để so sánh tốt hơn)
+    import unicodedata
+    def khong_dau(s):
+        if not s: return ""
+        s = str(s).replace("7", "bảy").replace("3", "ba").replace("4", "tứ")
+        s_unaccented = "".join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c))
+        res = s_unaccented.replace('đ', 'd').replace('Đ', 'D').lower().strip()
+        # MẸO CHUYÊN NGHIỆP: Cắt bỏ chữ "ca " ở đầu nếu có. 
+        # Giúp đồng nhất: "Cá Bảy Màu" và "bảy màu" đều trở thành "bay mau"
+        if res.startswith("ca "):
+            res = res[3:].strip()
+        return res
+        
+    keyword_chuan = khong_dau(ma_loai_ca)
     
     # 2. Xây dựng Kho từ vựng (Corpus) từ Database
-    ten_hien_thi_list = [c['ten_hien_thi'].lower() for c in danh_sach_db]
-    ten_tieng_anh_list = [str(c['ten_tieng_anh']).lower() for c in danh_sach_db if c['ten_tieng_anh']]
-    ma_loai_list = [c['ma_loai'].lower() for c in danh_sach_db]
-    tu_khoa_tim_kiem = ten_hien_thi_list + ten_tieng_anh_list + ma_loai_list
+    tu_khoa_map = {}
+    for c in danh_sach_db:
+        if c.get('ten_hien_thi'): tu_khoa_map[khong_dau(c['ten_hien_thi'])] = c
+        if c.get('ten_tieng_anh'): tu_khoa_map[khong_dau(c['ten_tieng_anh'])] = c
+        if c.get('ma_loai'): tu_khoa_map[khong_dau(c['ma_loai'])] = c
+        
+    tu_khoa_tim_kiem = list(tu_khoa_map.keys())
     
     # 3. Thuật toán Pattern Matching (Ratcliff/Obershelp)
-    # Lấy ra từ gần giống nhất, độ tin cậy tối thiểu 80% (cutoff=0.8) để tránh nhận nhầm (ví dụ 'cá chim' thành 'cá hồng kim')
-    ket_qua_match = difflib.get_close_matches(keyword, tu_khoa_tim_kiem, n=1, cutoff=0.8)
+    # Vì đã loại bỏ toàn bộ dấu (cá bảy màu = ca bay mau), nên có thể tự tin đặt cutoff=0.8 
+    # để tránh việc nhận nhầm "ca vang" thành "ca rong" (vì giống chữ ca, n, g)
+    ket_qua_match = difflib.get_close_matches(keyword_chuan, tu_khoa_tim_kiem, n=1, cutoff=0.8)
     
     if ket_qua_match:
-        tu_khoa_chuan = ket_qua_match[0]
-        # Map ngược từ khóa chuẩn về dòng dữ liệu cá
-        for c in danh_sach_db:
-            if (c['ten_hien_thi'].lower() == tu_khoa_chuan or 
-                str(c['ten_tieng_anh']).lower() == tu_khoa_chuan or 
-                c['ma_loai'].lower() == tu_khoa_chuan):
-                ca_moi = c
-                break
+        ca_moi = tu_khoa_map[ket_qua_match[0]]
                 
     if not ca_moi:
         ket_qua["loi_khuyen"] = f"Hệ thống AI không thể nhận diện được loài cá '{ma_loai_ca}'. Vui lòng kiểm tra lại lỗi chính tả (Gợi ý: Bảy Màu, La Hán...)."
@@ -328,6 +480,35 @@ def tu_van_tuong_thich(ma_loai_ca, so_luong=1):
         
     cursor.close()
     conn.close()
+    
+    # --- TÍCH HỢP OLLAMA (RAG) VÀO LÕI FUZZY LOGIC ĐỂ AI NHẬN XÉT ---
+    try:
+        import requests
+        prompt_context = f"""Bạn là một chuyên gia sinh thái thủy sinh giỏi nhất tại miền Nam Việt Nam.
+Hệ thống phần mềm vừa đánh giá độ tương thích của loài cá '{ket_qua.get('ten_ca')}' (số lượng: {so_luong} con) với hồ cá của khách như sau:
+- Tổng quan: {'ĐƯỢC PHÉP THẢ' if ket_qua.get('an_toan_tong_the') else 'KHÔNG NÊN THẢ'}
+- Nhận định của máy tính: {ket_qua.get('loi_khuyen')}
+- Chi tiết: {ket_qua.get('chi_tiet_nhiet')}, {ket_qua.get('chi_tiet_ph')}, {ket_qua.get('chi_tiet_bay_dan')}, {ket_qua.get('chi_tiet_mat_do')}
+
+Nhiệm vụ: Hãy dựa vào các thông số kỹ thuật khô khan ở trên, viết 1 đoạn văn (tối đa 4 câu) tư vấn thật tự nhiên, gần gũi, chuyên nghiệp bằng tiếng Việt.
+- Nếu hệ thống báo ĐƯỢC PHÉP THẢ: Hãy khen và chúc họ thành công.
+- Nếu hệ thống báo KHÔNG NÊN THẢ do chật hồ hoặc cắn nhau: Hãy cảnh báo nguy cơ nghiêm trọng để họ từ bỏ ý định.
+TUYỆT ĐỐI không xưng là AI, hãy xưng là 'Tôi' (chuyên gia).
+BẮT BUỘC TRẢ LỜI 100% BẰNG TIẾNG VIỆT. KHÔNG ĐƯỢC SỬ DỤNG BẤT KỲ TỪ TIẾNG TRUNG QUỐC HOẶC TIẾNG ANH NÀO.
+"""
+        response = requests.post("http://localhost:11434/api/generate", json={
+            "model": "qwen2.5:3b",
+            "prompt": prompt_context,
+            "stream": False
+        }, timeout=30)
+        
+        if response.status_code == 200:
+            result = response.json()
+            ai_text = result.get("response", "")
+            ket_qua["loi_khuyen"] = f"<div style='background: rgba(0,242,254,0.1); padding: 15px; border-radius: 10px; border-left: 4px solid #00f2fe; margin-bottom: 15px;'>🤖 <b>Chuyên gia AI Khuyên:</b> {ai_text}</div><div style='font-size: 0.9em; color: #94a3b8;'>📊 <b>Chi tiết từ Máy tính:</b> {ket_qua['loi_khuyen']}</div>"
+    except Exception as e:
+        pass # Nếu Ollama sập hoặc chưa bật, cứ trả về kết quả Text cũ
+        
     return ket_qua
 
 # --- API CHO TÍNH NĂNG ĐIỀU KHIỂN & CÀI ĐẶT THÔNG MINH ---
@@ -477,7 +658,7 @@ def api_cam_bien_moi_nhat():
     conn = lay_ket_noi()
     if not conn: return {}
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT nhiet_do, do_ph, muc_nuoc FROM du_lieu_cam_bien ORDER BY id DESC LIMIT 1")
+    cursor.execute("SELECT * FROM du_lieu_cam_bien ORDER BY id DESC LIMIT 1")
     data = cursor.fetchone()
     
     cursor.execute("SELECT * FROM cai_dat_ho WHERE id = 1")
@@ -486,6 +667,14 @@ def api_cam_bien_moi_nhat():
     conn.close()
     
     if not data: return {"nhiet_do": 0, "do_ph": 0, "muc_nuoc": 0, "canh_bao": []}
+    
+    # Xử lý linh hoạt định dạng thời gian tùy theo cấu trúc bảng của Database thực tế
+    if 'thoi_gian_tao' in data and data['thoi_gian_tao']:
+        data['thoi_gian_tao'] = data['thoi_gian_tao'].strftime("%Y-%m-%d %H:%M:%S")
+    elif 'thoi_gian' in data and data['thoi_gian']:
+        data['thoi_gian_tao'] = data['thoi_gian'].strftime("%Y-%m-%d %H:%M:%S")
+    elif 'ngay_tao' in data and data['ngay_tao']:
+        data['thoi_gian_tao'] = data['ngay_tao'].strftime("%Y-%m-%d %H:%M:%S")
     
     canh_bao = []
     if cai_dat:
@@ -743,6 +932,67 @@ def lay_danh_sach_yeu_cau():
     cursor.close(); conn.close()
     return data
 
+# --- API CHATBOT TƯ VẤN BẰNG RAG + OLLAMA ---
+class ChatRequest(BaseModel):
+    tin_nhan: str
+
+@app.post("/api/chat_tu_van")
+def api_chat_tu_van(req: ChatRequest):
+    # 1. RAG (Retrieval) - Lấy thông tin hồ
+    conn = lay_ket_noi()
+    if not conn:
+        return {"reply": "Lỗi kết nối cơ sở dữ liệu."}
+    cursor = conn.cursor(dictionary=True)
+    
+    # Lấy nhiệt độ, pH mới nhất
+    cursor.execute("SELECT * FROM du_lieu_cam_bien ORDER BY id DESC LIMIT 1")
+    cam_bien = cursor.fetchone() or {"nhiet_do": "Không rõ", "do_ph": "Không rõ"}
+    
+    # Lấy danh sách cá đang nuôi
+    cursor.execute("SELECT lc.ten_hien_thi, lc.nhiet_do_min, lc.nhiet_do_max, lc.ph_min, lc.ph_max FROM ca_dang_nuoi cdn JOIN loai_ca lc ON cdn.id_loai_ca = lc.id")
+    ca_list = cursor.fetchall()
+    
+    cursor.close()
+    conn.close()
+    
+    # 2. Xây dựng Prompt (Augmented)
+    thong_tin_ca = ""
+    if ca_list:
+        thong_tin_ca = "Cá trong hồ: " + ", ".join([f"{c['ten_hien_thi']} (Nhiệt độ: {c['nhiet_do_min']}-{c['nhiet_do_max']}°C, pH: {c['ph_min']}-{c['ph_max']})" for c in ca_list])
+    else:
+        thong_tin_ca = "Hồ hiện tại đang trống, chưa có cá."
+
+    prompt_context = f"""Bạn là một chuyên gia tư vấn sinh thái hồ cá thông minh, đặc biệt am hiểu về các loài cá cảnh nước ngọt phổ biến ở miền Nam Việt Nam (khí hậu nhiệt đới, nước ấm).
+Dữ liệu hồ cá thực tế hiện tại của người dùng:
+- Nhiệt độ nước: {cam_bien.get('nhiet_do', 'Không rõ')}°C
+- Độ pH: {cam_bien.get('do_ph', 'Không rõ')}
+- {thong_tin_ca}
+
+Câu hỏi của người dùng: {req.tin_nhan}
+
+Nhiệm vụ của bạn: 
+1. Hãy trả lời trực tiếp câu hỏi trên một cách ngắn gọn, thân thiện bằng tiếng Việt. 
+2. Nếu thông số hồ hiện tại không phù hợp với loại cá khách định thả, hãy cảnh báo ngay. 
+3. Nếu loài cá khách hỏi KHÔNG CÓ trong danh sách cá đang nuôi (tức là cá mới), hãy kiểm tra xem nó có hợp với môi trường hiện tại và có hung dữ cắn cá cũ không.
+4. RẤT QUAN TRỌNG: Phạm vi đồ án này chỉ hỗ trợ các loài cá cảnh miền Nam Việt Nam. Nếu người dùng hỏi về cá xứ lạnh (Cá hồi, cá tầm...), cá nước mặn mạn ngược, hoặc sinh vật không phải cá cảnh, hãy từ chối lịch sự và nhắc nhở họ về phạm vi miền Nam Việt Nam.
+"""
+
+    # 3. Gửi cho Ollama (Generation)
+    try:
+        response = requests.post("http://localhost:11434/api/generate", json={
+            "model": "qwen2.5:3b",
+            "prompt": prompt_context,
+            "stream": False
+        }, timeout=30)
+        
+        if response.status_code == 200:
+            result = response.json()
+            return {"reply": result.get("response", "Lỗi: Không nhận được phản hồi từ AI.")}
+        else:
+            return {"reply": f"Lỗi từ Ollama: {response.text}"}
+    except Exception as e:
+        return {"reply": "Không thể kết nối đến AI Ollama. Đảm bảo Ollama đang chạy nền."}
+
 # ==========================================
 # PHÂN HỆ MQTT VÀ HẸN GIỜ TỰ ĐỘNG (BACKGROUND)
 # ==========================================
@@ -767,38 +1017,34 @@ def on_message(client, userdata, msg):
         data = json.loads(payload)
         conn = lay_ket_noi()
         if not conn: return
-        cursor = conn.cursor(dictionary=True)
-        
-        # 1. Nếu là bản tin trạng thái nút bấm (Đèn/Bơm/Bơm Xả/Bơm Cấp)
-        if topic == "hoca_test/status":
-            den = data.get('trang_thai_den', 0)
-            bom = data.get('trang_thai_bom', 0)
-            bom_xa = data.get('trang_thai_bom_xa', 0)
-            bom_cap = data.get('trang_thai_bom_cap', 0)
-            relay_5 = data.get('trang_thai_relay_5', 0)
-            cursor.execute("UPDATE cai_dat_ho SET trang_thai_den=%s, trang_thai_bom=%s, trang_thai_bom_xa=%s, trang_thai_bom_cap=%s, trang_thai_relay_5=%s WHERE id=1", (den, bom, bom_xa, bom_cap, relay_5))
-            conn.commit()
-            cursor.close(); conn.close()
-            return
-
-        # 2. Xử lý yêu cầu xin cấu hình từ ESP32 khi vừa khởi động
-        if data.get('request') == 'GET_CONFIG':
-            cursor.execute("SELECT sieu_am_day, sieu_am_tran FROM cai_dat_ho WHERE id=1")
-            cd = cursor.fetchone()
-            if cd:
-                mqtt_client.publish("hoca_test/commands", f"CFG_W_{cd['sieu_am_day']}_{cd['sieu_am_tran']}")
-            cursor.close(); conn.close()
-            return
-            
-        # 3. Nếu là bản tin cảm biến định kỳ
-        nhiet_do = data.get('nhiet_do', 0)
-        do_ph = data.get('do_ph', 0)
-        khoang_cach_do_duoc = data.get('muc_nuoc', 0) # Bản mới ESP32 gửi cm thô
-        
-        # Lưu vào MySQL
-        conn = lay_ket_noi()
-        if conn:
+        try:
             cursor = conn.cursor(dictionary=True)
+            
+            # 1. Nếu là bản tin trạng thái nút bấm (Đèn/Bơm/Bơm Xả/Bơm Cấp)
+            if topic == "hoca_test/status":
+                den = data.get('trang_thai_den', 0)
+                bom = data.get('trang_thai_bom', 0)
+                bom_xa = data.get('trang_thai_bom_xa', 0)
+                bom_cap = data.get('trang_thai_bom_cap', 0)
+                relay_5 = data.get('trang_thai_relay_5', 0)
+                cursor.execute("UPDATE cai_dat_ho SET trang_thai_den=%s, trang_thai_bom=%s, trang_thai_bom_xa=%s, trang_thai_bom_cap=%s, trang_thai_relay_5=%s WHERE id=1", (den, bom, bom_xa, bom_cap, relay_5))
+                conn.commit()
+                return
+    
+            # 2. Xử lý yêu cầu xin cấu hình từ ESP32 khi vừa khởi động
+            if data.get('request') == 'GET_CONFIG':
+                cursor.execute("SELECT sieu_am_day, sieu_am_tran FROM cai_dat_ho WHERE id=1")
+                cd = cursor.fetchone()
+                if cd:
+                    mqtt_client.publish("hoca_test/commands", f"CFG_W_{cd['sieu_am_day']}_{cd['sieu_am_tran']}")
+                return
+                
+            # 3. Nếu là bản tin cảm biến định kỳ
+            nhiet_do = data.get('nhiet_do', 0)
+            do_ph = data.get('do_ph', 0)
+            khoang_cach_do_duoc = data.get('muc_nuoc', 0) # Bản mới ESP32 gửi cm thô
+            
+            # Đọc cài đặt hồ để quy đổi phần trăm
             cursor.execute("SELECT * FROM cai_dat_ho WHERE id = 1")
             cai_dat = cursor.fetchone()
             
@@ -873,10 +1119,16 @@ def on_message(client, userdata, msg):
                     mqtt_client.publish("hoca_test/commands", "ALARM_OFF")
 
             conn.commit()
-            cursor.close()
-            conn.close()
+        except Exception as inner_e:
+            print("Lỗi MySQL trong lúc ghi MQTT:", inner_e)
     except Exception as e:
         print("Lỗi phân tích dữ liệu MQTT:", e)
+    finally:
+        # LUÔN LUÔN ĐÓNG KẾT NỐI ĐỂ KHÔNG LÀM TREO CLEVER CLOUD
+        if 'cursor' in locals() and cursor:
+            cursor.close()
+        if 'conn' in locals() and conn:
+            conn.close()
 
 mqtt_client.on_connect = on_connect
 mqtt_client.on_message = on_message

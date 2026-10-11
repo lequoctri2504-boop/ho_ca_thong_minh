@@ -39,6 +39,13 @@ const uploadZone = document.getElementById('upload-zone');
 const fileInput = document.getElementById('file-input');
 const previewImg = document.getElementById('preview-image');
 const analyzeBtn = document.getElementById('analyze-btn');
+// --- CẤU HÌNH KẾT NỐI SERVER ---
+// Mở comment dòng dưới nếu chạy trên máy tính (Local)
+const API_BASE_URL = 'http://localhost:8000';
+
+// Mở comment dòng dưới nếu đã úp Server Python lên mạng (thay bằng địa chỉ thật)
+// const API_BASE_URL = 'https://dia-chi-server-cua-ban.com';
+
 const loading = document.getElementById('loading');
 const resultSection = document.getElementById('result-section');
 let currentFile = null;
@@ -80,7 +87,7 @@ analyzeBtn.addEventListener('click', async () => {
 
     const formData = new FormData(); formData.append('anh_upload', currentFile);
     try {
-        const response = await fetch('http://localhost:8000/api/nhan_dien_anh', { method: 'POST', body: formData });
+        const response = await fetch(API_BASE_URL + '/api/nhan_dien_anh', { method: 'POST', body: formData });
         if (!response.ok) throw new Error('Lỗi Server');
         const data = await response.json();
         
@@ -115,13 +122,22 @@ document.getElementById('manual-analyze-btn').addEventListener('click', async ()
     aiResultBox.classList.add('hidden');
 
     try {
-        const response = await fetch(`http://localhost:8000/api/tu_van?ma_loai_ca=${encodeURIComponent(ma_loai_ca)}&so_luong=${qty}`);
+        const response = await fetch(`${API_BASE_URL}/api/tu_van?ma_loai_ca=${encodeURIComponent(ma_loai_ca)}&so_luong=${qty}`);
         if (!response.ok) throw new Error('Lỗi Server');
         const data = await response.json();
         
         if (data.id_loai_ca === null) {
-            alert(data.loi_khuyen);
             loading.classList.add('hidden'); document.getElementById('manual-analyze-btn').classList.remove('hidden');
+            if (confirm(data.loi_khuyen + "\n\nLoài cá này chưa có trong Từ điển. Bạn có muốn gửi yêu cầu cho Admin cập nhật không?")) {
+                fetch(`${API_BASE_URL}/api/yeu_cau_ca`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ten_ca: ma_loai_ca })
+                }).then(r => r.json()).then(res => {
+                    alert(res.message);
+                    loadYeuCauCa();
+                });
+            }
             return;
         }
         
@@ -139,7 +155,7 @@ document.getElementById('manual-analyze-btn').addEventListener('click', async ()
 // Hàm dùng chung để in ra Báo cáo chi tiết 3 tiêu chí
 function renderTuVan(chi_tiet, loi_khuyen_tong_the) {
     const adviceEl = document.getElementById('res-advice');
-    adviceEl.textContent = loi_khuyen_tong_the;
+    adviceEl.innerHTML = loi_khuyen_tong_the;
     
     const setHtml = (id, text) => {
         const el = document.getElementById(id);
@@ -158,10 +174,14 @@ function renderTuVan(chi_tiet, loi_khuyen_tong_the) {
         resBox.className = "text-red";
         setHtml('res-overall', "Không an toàn");
     }
-    
     setHtml('res-detail', `Nhiệt độ: ${chi_tiet.chi_tiet_nhiet} <br> Độ pH: ${chi_tiet.chi_tiet_ph}`);
     setHtml('res-detail-group', chi_tiet.chi_tiet_bay_dan);
     setHtml('res-detail-capacity', chi_tiet.chi_tiet_mat_do || "Không rõ");
+    
+    // Cập nhật cho bảng Tổng thể bên dưới
+    setHtml('res-detail-temp', chi_tiet.chi_tiet_nhiet);
+    setHtml('res-detail-ph', chi_tiet.chi_tiet_ph);
+    setHtml('res-detail-fish', chi_tiet.chi_tiet_bay_dan);
 }
 
 // ---- LOGIC BIỂU ĐỒ TỔNG QUAN ----
@@ -170,7 +190,7 @@ let waterChart, tempChart, phChart;
 
 async function renderChart(ngay = 0) {
     try {
-        const res = await fetch(`http://localhost:8000/api/bieu_do?ngay=${ngay}`);
+        const res = await fetch(`${API_BASE_URL}/api/bieu_do?ngay=${ngay}`);
         if (!res.ok) return;
         const du_lieu = await res.json();
         
@@ -305,12 +325,19 @@ if(bomSelect) {
         if(timer) timer.classList.toggle('hidden', mode !== 'timer');
     });
 }
+// Khóa tạm thời việc đồng bộ từ server để tránh tình trạng nút gạt bị giật ngược lại
+let isToggling = false;
+let toggleTimeout = null;
 
 // Lắng nghe gạt công tắc thủ công (Bật/Tắt tức thời bằng API riêng)
 ['light', 'pump', 'bomxa', 'bomcap', 'relay5'].forEach(thiet_bi => {
     const toggle = document.getElementById(`${thiet_bi}-toggle`);
     if(toggle) {
         toggle.addEventListener('change', async (e) => {
+            isToggling = true;
+            clearTimeout(toggleTimeout);
+            toggleTimeout = setTimeout(() => { isToggling = false; }, 3000); // Tạm khóa đồng bộ trong 3 giây
+            
             const isChecked = e.target.checked;
             const statusEl = document.getElementById(`${thiet_bi}-status`);
             if (statusEl) {
@@ -324,7 +351,7 @@ if(bomSelect) {
             // Gửi lệnh API tức thời
             const mapApi = { 'light': 'den', 'pump': 'bom', 'bomxa': 'bom_xa', 'bomcap': 'bom_cap', 'relay5': 'relay_5' };
             try {
-                await fetch('http://localhost:8000/api/dieu_khien_thiet_bi', {
+                await fetch(API_BASE_URL + '/api/dieu_khien_thiet_bi', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ thiet_bi: mapApi[thiet_bi], trang_thai: isChecked })
@@ -343,7 +370,7 @@ if(btnQuickWater) {
         if(!confirm(`Xác nhận rút ${pct}% nước hồ ngay lập tức? Máy Lọc sẽ tạm ngắt an toàn.`)) return;
         
         try {
-            const res = await fetch('http://localhost:8000/api/thay_nuoc_ngay', {
+            const res = await fetch(API_BASE_URL + '/api/thay_nuoc_ngay', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ phan_tram: pct })
@@ -360,7 +387,7 @@ if(btnQuickWater) {
 // Hàm Load dữ liệu cài đặt từ Backend
 async function loadSettings() {
     try {
-        const res = await fetch('http://localhost:8000/api/cai_dat');
+        const res = await fetch(API_BASE_URL + '/api/cai_dat');
         if (!res.ok) return;
         const data = await res.json();
         
@@ -452,7 +479,7 @@ async function saveSettings() {
     }
     
     try {
-        const res = await fetch('http://localhost:8000/api/cai_dat', {
+        const res = await fetch(API_BASE_URL + '/api/cai_dat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(reqData)
@@ -478,7 +505,7 @@ document.getElementById('btn-save-settings').addEventListener('click', async () 
 // Hàm Load Lịch sử Cảnh báo Hệ thống
 async function loadAlertHistory() {
     try {
-        const res = await fetch('http://localhost:8000/api/canh_bao');
+        const res = await fetch(API_BASE_URL + '/api/canh_bao');
         if (!res.ok) return;
         const alerts = await res.json();
         
@@ -535,7 +562,7 @@ document.getElementById('btn-save-tank').addEventListener('click', async () => {
 
 async function loadFishList() {
     try {
-        const res = await fetch('http://localhost:8000/api/ca_dang_nuoi');
+        const res = await fetch(API_BASE_URL + '/api/ca_dang_nuoi');
         if (!res.ok) return;
         const fishList = await res.json();
         const tbody = document.getElementById('fish-list-tbody');
@@ -566,7 +593,7 @@ async function loadFishList() {
                 const id = e.currentTarget.getAttribute('data-id');
                 const sl = parseInt(e.currentTarget.value);
                 if (sl >= 1) {
-                    await fetch(`http://localhost:8000/api/ca_dang_nuoi/${id}`, { 
+                    await fetch(`${API_BASE_URL}/api/ca_dang_nuoi/${id}`, { 
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ so_luong: sl })
@@ -581,7 +608,7 @@ async function loadFishList() {
             btn.addEventListener('click', async (e) => {
                 const id = e.currentTarget.getAttribute('data-id');
                 if(confirm("Bạn có chắc chắn muốn xóa loài cá này khỏi hồ?")) {
-                    await fetch(`http://localhost:8000/api/ca_dang_nuoi/${id}`, { method: 'DELETE' });
+                    await fetch(`${API_BASE_URL}/api/ca_dang_nuoi/${id}`, { method: 'DELETE' });
                     loadFishList();
                 }
             });
@@ -600,7 +627,7 @@ document.getElementById('btn-add-fish').addEventListener('click', async () => {
     }
     
     try {
-        const res = await fetch('http://localhost:8000/api/ca_dang_nuoi', {
+        const res = await fetch(API_BASE_URL + '/api/ca_dang_nuoi', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ten_ca: ten, so_luong: sl })
@@ -635,8 +662,8 @@ loadSettings();
 setInterval(async () => {
     try {
         // 1. Đồng bộ trạng thái Nút gạt (Đèn/Bơm/Bơm Xả/Bơm Cấp)
-        const resCaiDat = await fetch('http://localhost:8000/api/cai_dat');
-        if (resCaiDat.ok) {
+        const resCaiDat = await fetch(API_BASE_URL + '/api/cai_dat');
+        if (resCaiDat.ok && !isToggling) {
             const data = await resCaiDat.json();
             const lightToggle = document.getElementById('light-toggle');
             const pumpToggle = document.getElementById('pump-toggle');
@@ -673,7 +700,7 @@ setInterval(async () => {
         
         // 2. Đồng bộ Dữ liệu Cảm biến Lên 3 Thẻ Thông tin
         if(document.getElementById('tab-overview').classList.contains('active')) {
-            const resCb = await fetch('http://localhost:8000/api/cam_bien_moi_nhat');
+            const resCb = await fetch(API_BASE_URL + '/api/cam_bien_moi_nhat');
             if (resCb.ok) {
                 const cb = await resCb.json();
                 const nhietDo = cb.nhiet_do !== null ? cb.nhiet_do : 0;
@@ -703,7 +730,7 @@ setInterval(async () => {
     } catch (e) {
         // Bỏ qua lỗi kết nối để tránh spam console khi server sập
     }
-}, 300); // Rút ngắn từ 2000ms xuống 300ms để siêu mượt
+}, 2000); // Trả lại 2000ms (2 giây) để máy chủ không bị quá tải gây giật lag web
 
 // ==========================================
 // RÀNG BUỘC MỰC NƯỚC MAX BẰNG JS
@@ -728,3 +755,90 @@ if(maxWaterInput && tankHeightInput) {
         }
     });
 }
+
+// ==========================================
+// TÍNH NĂNG CHATBOT AI TƯ VẤN (RAG + OLLAMA)
+// ==========================================
+function toggleAIChat() {
+    const chatBox = document.getElementById('ai-chat-box');
+    const chatBtn = document.getElementById('ai-chat-btn');
+    if (chatBox.classList.contains('hidden')) {
+        chatBox.classList.remove('hidden');
+        chatBtn.style.display = 'none';
+        document.getElementById('ai-chat-input-text').focus();
+    } else {
+        chatBox.classList.add('hidden');
+        chatBtn.style.display = 'block';
+    }
+}
+
+async function sendAIChat(forcedMsg = null) {
+    const inputEl = document.getElementById('ai-chat-input-text');
+    const msg = forcedMsg || inputEl.value.trim();
+    if(!msg) return;
+    
+    // Hiện tin nhắn user
+    appendMessage(msg, 'user-msg');
+    inputEl.value = '';
+    
+    // Hiện chữ đang gõ...
+    const loadingId = appendMessage('<i class="fa-solid fa-ellipsis fa-fade"></i> AI đang phân tích...', 'ai-msg');
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/chat_tu_van`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tin_nhan: msg })
+        });
+        const data = await response.json();
+        
+        // Render kết quả (hỗ trợ xuống dòng)
+        document.getElementById(loadingId).innerHTML = data.reply ? data.reply.replace(/\n/g, '<br>') : "Không có phản hồi.";
+    } catch (error) {
+        document.getElementById(loadingId).innerHTML = "<span class='text-red'>Lỗi kết nối máy chủ AI. Đảm bảo Ollama đang chạy!</span>";
+    }
+}
+
+function appendMessage(text, className) {
+    const chatBox = document.getElementById('ai-chat-messages');
+    const msgDiv = document.createElement('div');
+    msgDiv.className = `message ${className}`;
+    msgDiv.innerHTML = text;
+    const id = 'msg-' + Date.now();
+    msgDiv.id = id;
+    chatBox.appendChild(msgDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+    return id;
+}
+
+// ---- LOGIC LOAD YÊU CẦU CẬP NHẬT CÁ ----
+async function loadYeuCauCa() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/yeu_cau_ca`);
+        const data = await response.json();
+        const tbody = document.getElementById('request-history-tbody');
+        if (!tbody) return;
+        
+        tbody.innerHTML = '';
+        data.forEach(item => {
+            const statusClass = item.trang_thai.includes('chờ') ? 'text-yellow' : 'text-green';
+            const statusIcon = item.trang_thai.includes('chờ') ? '<i class="fa-solid fa-clock"></i>' : '<i class="fa-solid fa-check"></i>';
+            tbody.innerHTML += `
+                <tr>
+                    <td>${item.thoi_gian_tao}</td>
+                    <td>${item.ten_ca}</td>
+                    <td class="${statusClass}">${statusIcon} ${item.trang_thai}</td>
+                </tr>
+            `;
+        });
+    } catch (e) {
+        console.error("Lỗi tải yêu cầu cá", e);
+    }
+}
+
+// Tải bảng yêu cầu khi trang vừa load
+document.addEventListener('DOMContentLoaded', () => {
+    loadYeuCauCa();
+});
+
+
