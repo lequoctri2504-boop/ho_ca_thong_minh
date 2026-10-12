@@ -540,6 +540,14 @@ class CaiDatRequest(BaseModel):
     lich_thay_nuoc_gio: str = ""
     lich_thay_nuoc_thu: str = ""
     trang_thai_relay_5: bool = False
+    coi_on_sec: int = 10
+    coi_off_sec: int = 30
+    coi_snooze_min: int = 5
+    coi_enable: bool = True
+    ph_offset: float = 0.0
+
+# Biến lưu trữ thời điểm hết hạn Snooze còi (chạy ngầm trên server)
+snooze_until = None
 
 @app.get("/api/cai_dat")
 def api_lay_cai_dat():
@@ -551,11 +559,22 @@ def api_lay_cai_dat():
     
     # Chuyển đổi định dạng TIME sang chuỗi (String) để FastAPI có thể render thành JSON
     for key in ['hen_gio_den_bat', 'hen_gio_den_tat', 'hen_gio_bom_bat', 'hen_gio_bom_tat']:
-        if cai_dat and cai_dat[key]:
+        if cai_dat and key in cai_dat and cai_dat[key]:
             cai_dat[key] = str(cai_dat[key])
             
     cursor.close()
     conn.close()
+    
+    # Kèm thêm thông tin trạng thái Snooze còi hiện tại
+    global snooze_until
+    now = datetime.datetime.now()
+    if snooze_until and now < snooze_until:
+        cai_dat['coi_dang_snooze'] = True
+        cai_dat['snooze_con_lai_giay'] = int((snooze_until - now).total_seconds())
+    else:
+        cai_dat['coi_dang_snooze'] = False
+        cai_dat['snooze_con_lai_giay'] = 0
+        
     return cai_dat
 
 @app.post("/api/cai_dat")
@@ -569,7 +588,7 @@ def api_luu_cai_dat(req: CaiDatRequest):
         che_do_den=%s, trang_thai_den=%s, hen_gio_den_bat=%s, hen_gio_den_tat=%s, lich_den_thu=%s,
         che_do_bom=%s, trang_thai_bom=%s, hen_gio_bom_bat=%s, hen_gio_bom_tat=%s, lich_bom_thu=%s,
         sieu_am_day=%s, sieu_am_tran=%s, phan_tram_thay=%s, lich_thay_nuoc_gio=%s, lich_thay_nuoc_thu=%s,
-        trang_thai_relay_5=%s
+        trang_thai_relay_5=%s, coi_on_sec=%s, coi_off_sec=%s, coi_snooze_min=%s, coi_enable=%s, ph_offset=%s
     WHERE id = 1
     """
     cursor.execute(sql, (
@@ -578,7 +597,7 @@ def api_luu_cai_dat(req: CaiDatRequest):
         req.che_do_den, req.trang_thai_den, req.hen_gio_den_bat, req.hen_gio_den_tat, req.lich_den_thu,
         req.che_do_bom, req.trang_thai_bom, req.hen_gio_bom_bat, req.hen_gio_bom_tat, req.lich_bom_thu,
         req.sieu_am_day, req.sieu_am_tran, req.phan_tram_thay, req.lich_thay_nuoc_gio, req.lich_thay_nuoc_thu,
-        req.trang_thai_relay_5
+        req.trang_thai_relay_5, req.coi_on_sec, req.coi_off_sec, req.coi_snooze_min, req.coi_enable, req.ph_offset
     ))
     conn.commit()
     cursor.close()
@@ -587,8 +606,14 @@ def api_luu_cai_dat(req: CaiDatRequest):
     # Bắn MQTT đồng bộ chiều cao bể xuống ESP32 để OLED hiển thị chính xác
     mqtt_client.publish("hoca_test/commands", f"CFG_W_{req.sieu_am_day}_{req.sieu_am_tran}")
     
+    # Đồng bộ cấu hình còi xuống ESP32
+    coi_en = 1 if req.coi_enable else 0
+    mqtt_client.publish("hoca_test/commands", f"CFG_ALARM_{coi_en}_{req.coi_on_sec}_{req.coi_off_sec}_{req.coi_snooze_min}")
+    
+    # Đồng bộ offset pH xuống ESP32
+    mqtt_client.publish("hoca_test/commands", f"CFG_PH_{req.ph_offset:.2f}")
+
     # Kích hoạt lệnh điều khiển MQTT NGAY LẬP TỨC 
-    # (Dù đang ở chế độ nào, khi user bấm trên web thì ưu tiên chạy lệnh đó)
     lenh_den = "DEN_ON" if req.trang_thai_den else "DEN_OFF"
     mqtt_client.publish("hoca_test/commands", lenh_den)
         
@@ -599,6 +624,51 @@ def api_luu_cai_dat(req: CaiDatRequest):
     mqtt_client.publish("hoca_test/commands", f"CHU_KY_{req.chu_ky_gui_data}")
     
     return {"message": "Đã lưu cài đặt thành công và gửi lệnh MQTT"}
+
+@app.post("/api/tat_coi_tam_thoi")
+def api_tat_coi_tam_thoi():
+    global snooze_until
+    conn = lay_ket_noi()
+    snooze_phut = 5
+    if conn:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT coi_snooze_min FROM cai_dat_ho WHERE id=1")
+        row = cursor.fetchone()
+        if row and row.get('coi_snooze_min'):
+            snooze_phut = int(row['coi_snooze_min'])
+        cursor.close(); conn.close()
+        
+    snooze_until = datetime.datetime.now() + datetime.timedelta(minutes=snooze_phut)
+    # Bắn MQTT ngắt còi ngay lập tức xuống ESP32
+    mqtt_client.publish("hoca_test/commands", f"ALARM_SNOOZE_{snooze_phut}")
+    return {"status": "ok", "message": f"Đã tạm tắt còi trong {snooze_phut} phút", "snooze_con_lai_giay": snooze_phut * 60}
+
+@app.post("/api/hieu_chuan_ph")
+def api_hieu_chuan_ph(data: dict):
+    ph_chuan = float(data.get("ph_chuan", 7.0))
+    conn = lay_ket_noi()
+    if not conn: return {"error": "Lỗi kết nối CSDL"}
+    cursor = conn.cursor(dictionary=True)
+    # Lấy pH đo được gần nhất từ cảm biến
+    cursor.execute("SELECT do_ph FROM du_lieu_cam_bien ORDER BY id DESC LIMIT 1")
+    row = cursor.fetchone()
+    ph_do = float(row['do_ph']) if row else 7.0
+    
+    # Tính độ lệch offset
+    cursor.execute("SELECT ph_offset FROM cai_dat_ho WHERE id=1")
+    c_row = cursor.fetchone()
+    current_offset = float(c_row.get('ph_offset', 0.0)) if c_row else 0.0
+    
+    # pH thực = pH đo thô + offset mới -> offset mới = ph_chuan - (ph_do - current_offset)
+    raw_ph = ph_do - current_offset
+    new_offset = ph_chuan - raw_ph
+    
+    cursor.execute("UPDATE cai_dat_ho SET ph_offset=%s WHERE id=1", (new_offset,))
+    conn.commit()
+    cursor.close(); conn.close()
+    
+    mqtt_client.publish("hoca_test/commands", f"CFG_PH_{new_offset:.2f}")
+    return {"status": "ok", "ph_offset": new_offset, "message": f"Đã cân chỉnh pH thành công (Độ bù: {new_offset:+.2f})"}
 
 class DieuKhienThietBiRequest(BaseModel):
     thiet_bi: str # 'den', 'bom', 'bom_xa', 'bom_cap'
@@ -619,6 +689,8 @@ def api_dieu_khien_thiet_bi(req: DieuKhienThietBiRequest):
 
 class ThayNuocNhanhRequest(BaseModel):
     phan_tram: float
+    chi_xa_can: bool = False
+    tu_dong_cap_lai: bool = False
 
 @app.post("/api/thay_nuoc_ngay")
 def api_thay_nuoc_ngay(req: ThayNuocNhanhRequest):
@@ -627,16 +699,35 @@ def api_thay_nuoc_ngay(req: ThayNuocNhanhRequest):
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT muc_nuoc FROM du_lieu_cam_bien ORDER BY id DESC LIMIT 1")
         cb = cursor.fetchone()
-        muc_nuoc_hien_tai = cb['muc_nuoc'] if cb else 100.0
+        muc_nuoc_hien_tai = float(cb['muc_nuoc']) if cb else 100.0
         
-        muc_tieu = max(0.0, float(muc_nuoc_hien_tai) - req.phan_tram)
-        cursor.execute("UPDATE cai_dat_ho SET dang_thay_nuoc=1, muc_tieu_xa=%s WHERE id=1", (muc_tieu,))
+        # Nếu xả toàn bộ (hoặc dọn hồ), mục tiêu xả là 0% (nhưng ngắt an toàn cách đáy 2.5cm)
+        if req.chi_xa_can or req.phan_tram >= 95.0:
+            muc_tieu = 0.0
+            tu_dong_cap = False
+        else:
+            muc_tieu = max(0.0, float(muc_nuoc_hien_tai) - req.phan_tram)
+            tu_dong_cap = bool(req.tu_dong_cap_lai)
+        
+        # Tự động Snooze còi báo cạn trong 30 phút để không rú còi lúc xả dọn hồ
+        global snooze_until
+        snooze_until = datetime.datetime.now() + datetime.timedelta(minutes=30)
+        
+        cursor.execute("UPDATE cai_dat_ho SET dang_thay_nuoc=1, muc_tieu_xa=%s, tu_dong_cap_lai=%s, trang_thai_bom_xa=1, trang_thai_bom_cap=0 WHERE id=1", (muc_tieu, 1 if tu_dong_cap else 0))
         conn.commit()
         
-        mqtt_client.publish("hoca_test/commands", "BOM_OFF") # Tắt máy lọc
-        mqtt_client.publish("hoca_test/commands", "BOMXA_ON") # Bật bơm xả
+        # Tăng tốc độ đo của ESP32 lên 1 GIÂY để phản hồi tức thì
+        mqtt_client.publish("hoca_test/commands", "CHU_KY_1")
+        mqtt_client.publish("hoca_test/commands", "BOM_OFF")   # Tắt máy lọc
+        mqtt_client.publish("hoca_test/commands", "BOMCAP_OFF") # Đảm bảo bơm cấp tắt
+        
+        # Gửi lệnh có mục tiêu % dừng độc lập trực tiếp cho ESP32 tự ngắt tại biên
+        mqtt_client.publish("hoca_test/commands", f"BOMXA_TARGET_{muc_tieu:.1f}")
         cursor.close(); conn.close()
-        return {"message": "Đã kích hoạt chu trình thay nước thủ công."}
+        
+        hanh_dong = "rút cạn để dọn hồ" if (req.chi_xa_can or req.phan_tram >= 95.0) else f"rút {req.phan_tram:.0f}% nước (về mốc {muc_tieu:.0f}%)"
+        che_do_cap = " [Tự bơm cấp bù lại khi xả xong]" if tu_dong_cap else " [Chỉ rút nước rồi dừng - Không tự bơm lại]"
+        return {"message": f"Đã kích hoạt: {hanh_dong}. Chế độ: {che_do_cap}. ESP32 tự động ngắt bơm xả tại biên."}
     return {"error": "Lỗi CSDL"}
 
 @app.get("/api/canh_bao")
@@ -847,65 +938,94 @@ class LoaiCaRequest(BaseModel):
     nhiet_do_max: float
     ph_min: float
     ph_max: float
-    the_tich_yeu_cau: float
-    tinh_cach: str
+    the_tich_yeu_cau: float = 5.0
+    tinh_cach: str = "Hòa bình"
+    kich_thuoc_adult: float = 5.0
+    he_so_bioload: float = 1.0
+    kieu_vay: str = "Ngắn"
+    tang_boi: str = "Giữa"
+    so_luong_bay_min: int = 1
     nguon_trich_dan: str = ""
+    mo_ta: str = ""
 
 @app.get("/api/admin/loai_ca")
 def get_tat_ca_loai_ca():
     conn = lay_ket_noi()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM loai_ca")
-    data = cursor.fetchall()
-    cursor.close(); conn.close()
-    return data
+    if not conn: return []
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM loai_ca ORDER BY id ASC")
+        data = cursor.fetchall()
+        for r in data:
+            if r.get('ngay_tao'):
+                r['ngay_tao'] = str(r['ngay_tao'])
+        return data
+    except Exception as e:
+        logger.error(f"Lỗi lấy danh sách loài cá: {e}")
+        return []
+    finally:
+        if 'cursor' in locals() and cursor: cursor.close()
+        conn.close()
 
 @app.post("/api/admin/loai_ca")
 def them_loai_ca_moi(req: LoaiCaRequest):
     conn = lay_ket_noi()
+    if not conn: return {"error": "Lỗi kết nối CSDL"}
     cursor = conn.cursor()
     sql = """INSERT INTO loai_ca (ma_loai, ten_hien_thi, ten_tieng_anh, ten_khoa_hoc, 
-             nhiet_do_min, nhiet_do_max, ph_min, ph_max, the_tich_yeu_cau, tinh_cach, nguon_trich_dan) 
-             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
+             nhiet_do_min, nhiet_do_max, ph_min, ph_max, the_tich_yeu_cau, tinh_cach, 
+             kich_thuoc_adult, he_so_bioload, kieu_vay, tang_boi, so_luong_bay_min, nguon_trich_dan, mo_ta) 
+             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
     try:
-        cursor.execute(sql, (req.ma_loai, req.ten_hien_thi, req.ten_tieng_anh, req.ten_khoa_hoc, 
-                             req.nhiet_do_min, req.nhiet_do_max, req.ph_min, req.ph_max, 
-                             req.the_tich_yeu_cau, req.tinh_cach, req.nguon_trich_dan))
+        cursor.execute(sql, (
+            req.ma_loai, req.ten_hien_thi, req.ten_tieng_anh, req.ten_khoa_hoc, 
+            req.nhiet_do_min, req.nhiet_do_max, req.ph_min, req.ph_max, 
+            req.the_tich_yeu_cau, req.tinh_cach, req.kich_thuoc_adult, req.he_so_bioload,
+            req.kieu_vay, req.tang_boi, req.so_luong_bay_min, req.nguon_trich_dan, req.mo_ta
+        ))
         conn.commit()
+        return {"message": "Đã thêm loài cá mới thành công!"}
     except Exception as e:
         return {"error": str(e)}
     finally:
         cursor.close(); conn.close()
-    return {"message": "Đã thêm loài cá mới thành công!"}
 
 @app.delete("/api/admin/loai_ca/{id}")
 def xoa_loai_ca(id: int):
     conn = lay_ket_noi()
+    if not conn: return {"error": "Lỗi kết nối CSDL"}
     cursor = conn.cursor()
     cursor.execute("DELETE FROM loai_ca WHERE id = %s", (id,))
     conn.commit()
     cursor.close(); conn.close()
-    return {"message": "Đã xóa loài cá!"}
+    return {"message": "Đã xóa loài cá thành công!"}
 
 @app.put("/api/admin/loai_ca/{id}")
 def sua_loai_ca(id: int, req: LoaiCaRequest):
     conn = lay_ket_noi()
+    if not conn: return {"error": "Lỗi kết nối CSDL"}
     cursor = conn.cursor()
     sql = """UPDATE loai_ca SET 
              ma_loai=%s, ten_hien_thi=%s, ten_tieng_anh=%s, ten_khoa_hoc=%s, 
              nhiet_do_min=%s, nhiet_do_max=%s, ph_min=%s, ph_max=%s, 
-             the_tich_yeu_cau=%s, tinh_cach=%s, nguon_trich_dan=%s
+             the_tich_yeu_cau=%s, tinh_cach=%s, kich_thuoc_adult=%s, 
+             he_so_bioload=%s, kieu_vay=%s, tang_boi=%s, so_luong_bay_min=%s, 
+             nguon_trich_dan=%s, mo_ta=%s
              WHERE id=%s"""
     try:
-        cursor.execute(sql, (req.ma_loai, req.ten_hien_thi, req.ten_tieng_anh, req.ten_khoa_hoc, 
-                             req.nhiet_do_min, req.nhiet_do_max, req.ph_min, req.ph_max, 
-                             req.the_tich_yeu_cau, req.tinh_cach, req.nguon_trich_dan, id))
+        cursor.execute(sql, (
+            req.ma_loai, req.ten_hien_thi, req.ten_tieng_anh, req.ten_khoa_hoc, 
+            req.nhiet_do_min, req.nhiet_do_max, req.ph_min, req.ph_max, 
+            req.the_tich_yeu_cau, req.tinh_cach, req.kich_thuoc_adult,
+            req.he_so_bioload, req.kieu_vay, req.tang_boi, req.so_luong_bay_min,
+            req.nguon_trich_dan, req.mo_ta, id
+        ))
         conn.commit()
+        return {"message": "Đã cập nhật loài cá thành công!"}
     except Exception as e:
         return {"error": str(e)}
     finally:
         cursor.close(); conn.close()
-    return {"message": "Đã cập nhật loài cá thành công!"}
 
 # --- API YÊU CẦU THÊM CÁ TỪ USER ---
 class YeuCauCaRequest(BaseModel):
@@ -923,14 +1043,216 @@ def gui_yeu_cau_them_ca(req: YeuCauCaRequest):
 @app.get("/api/admin/yeu_cau")
 def lay_danh_sach_yeu_cau():
     conn = lay_ket_noi()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM yeu_cau_them_ca ORDER BY id DESC")
-    data = cursor.fetchall()
-    for row in data:
-        if row.get('thoi_gian_tao'):
-            row['thoi_gian_tao'] = row['thoi_gian_tao'].strftime("%d/%m/%Y %H:%M")
-    cursor.close(); conn.close()
-    return data
+    if not conn: return []
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM yeu_cau_them_ca ORDER BY id DESC")
+        data = cursor.fetchall()
+        for row in data:
+            if row.get('thoi_gian_tao'):
+                row['thoi_gian_tao'] = row['thoi_gian_tao'].strftime("%d/%m/%Y %H:%M")
+            if not row.get('ten_ca_khach_nhap') and row.get('ten_ca'):
+                row['ten_ca_khach_nhap'] = row['ten_ca']
+        return data
+    except Exception as e:
+        logger.error(f"Lỗi lấy danh sách yêu cầu: {e}")
+        return []
+    finally:
+        if 'cursor' in locals() and cursor: cursor.close()
+        conn.close()
+
+@app.delete("/api/admin/yeu_cau/{id}")
+def xoa_yeu_cau_khach(id: int):
+    conn = lay_ket_noi()
+    if not conn: return {"error": "Không thể kết nối cơ sở dữ liệu"}
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM yeu_cau_them_ca WHERE id = %s", (id,))
+        conn.commit()
+        return {"message": "Đã xóa yêu cầu thành công!"}
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        if 'cursor' in locals() and cursor: cursor.close()
+        conn.close()
+
+# --- API QUẢN TRỊ ESP32 & NẠP OTA TỪ XA ---
+@app.get("/api/admin/esp32_status")
+def lay_trang_thai_esp32():
+    is_online = False
+    if esp32_tracker["last_seen"]:
+        try:
+            last_dt = datetime.datetime.strptime(esp32_tracker["last_seen"], "%Y-%m-%d %H:%M:%S")
+            # Nếu bản tin gửi trong vòng 120s thì coi như đang Online
+            if (datetime.datetime.now() - last_dt).total_seconds() < 120:
+                is_online = True
+        except Exception:
+            pass
+    return {
+        "ip": esp32_tracker["ip"],
+        "last_seen": esp32_tracker["last_seen"] or "Chưa nhận được tín hiệu",
+        "online": is_online,
+        "broker_connected": esp32_tracker["broker_connected"]
+    }
+
+@app.post("/api/admin/restart_esp32")
+def khoi_dong_lai_esp32():
+    try:
+        mqtt_client.publish("hoca_test/commands", "ESP_RESTART")
+        return {"message": "Đã gửi lệnh khởi động lại (ESP_RESTART) tới ESP32 qua MQTT!"}
+    except Exception as e:
+        return {"error": f"Lỗi gửi lệnh MQTT: {str(e)}"}
+
+@app.post("/api/admin/ota_upload")
+async def tai_len_firmware_ota(file: UploadFile = File(...), esp_ip: str = None):
+    target_ip = esp_ip or esp32_tracker.get("ip")
+    if not target_ip or target_ip == "Chưa kết nối":
+        return JSONResponse(status_code=400, content={"error": "Chưa nhận diện được IP của ESP32. Vui lòng bật ESP32 hoặc nhập thủ công IP."})
+    
+    if not file.filename.endswith(".bin"):
+        return JSONResponse(status_code=400, content={"error": "File không hợp lệ! Vui lòng chọn file biên dịch dạng .bin."})
+
+    try:
+        content = await file.read()
+        url = f"http://{target_ip}/update"
+        files = {'firmware': (file.filename, content, 'application/octet-stream')}
+        logger.info(f"Đang truyền Firmware {file.filename} ({len(content)} bytes) tới {url}...")
+        resp = requests.post(url, files=files, timeout=60)
+        if resp.status_code == 200:
+            return {"message": f"Nạp Firmware {file.filename} thành công! ESP32 đang tự khởi động lại...", "details": resp.text}
+        else:
+            return JSONResponse(status_code=resp.status_code, content={"error": f"ESP32 báo lỗi ({resp.status_code}): {resp.text}"})
+    except requests.exceptions.Timeout:
+        return JSONResponse(status_code=504, content={"error": "Hết thời gian chờ phản hồi từ ESP32 (Timeout 60s)."})
+    except requests.exceptions.ConnectionError:
+        return JSONResponse(status_code=502, content={"error": f"Không thể kết nối đến http://{target_ip}/update. Kiểm tra lại WiFi và IP của ESP32."})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"Lỗi nạp OTA: {str(e)}"})
+
+# --- API MLOPs & LỊCH SỬ NHẬN DIỆN AI ---
+@app.get("/api/admin/lich_su_ai")
+def lay_lich_su_ai():
+    conn = lay_ket_noi()
+    if not conn: return []
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS lich_su_ai (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            duong_dan_anh VARCHAR(255),
+            id_loai_ca INT,
+            do_chinh_xac FLOAT,
+            phu_hop_khong BOOLEAN,
+            thoi_gian_tao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
+        cursor.execute("""
+            SELECT lsa.id, lsa.duong_dan_anh, lsa.do_chinh_xac, lsa.phu_hop_khong, lsa.thoi_gian_tao,
+                   lc.ten_hien_thi, lc.ma_loai
+            FROM lich_su_ai lsa
+            LEFT JOIN loai_ca lc ON lsa.id_loai_ca = lc.id
+            ORDER BY lsa.id DESC LIMIT 50
+        """)
+        data = cursor.fetchall()
+        for row in data:
+            if row.get('thoi_gian_tao'):
+                row['thoi_gian_tao'] = row['thoi_gian_tao'].strftime("%d/%m/%Y %H:%M")
+            if row.get('duong_dan_anh'):
+                ten_file = os.path.basename(row['duong_dan_anh'])
+                row['url_anh'] = f"/uploads/{ten_file}"
+            else:
+                row['url_anh'] = ""
+        return data
+    except Exception as e:
+        logger.error(f"Lỗi truy vấn lịch sử AI: {e}")
+        return []
+    finally:
+        if 'cursor' in locals() and cursor: cursor.close()
+        conn.close()
+
+@app.delete("/api/admin/lich_su_ai/{id}")
+def xoa_lich_su_ai(id: int):
+    conn = lay_ket_noi()
+    if not conn: return {"error": "Lỗi kết nối CSDL"}
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM lich_su_ai WHERE id=%s", (id,))
+        conn.commit()
+        return {"message": "Đã xóa bản ghi AI thành công!"}
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        if 'cursor' in locals() and cursor: cursor.close()
+        conn.close()
+
+# --- API GIÁM SÁT TRẠNG THÁI HỆ THỐNG & DỌN DẸP CSDL ---
+@app.get("/api/admin/trang_thai_he_thong")
+def lay_trang_thai_he_thong():
+    conn = lay_ket_noi()
+    thong_ke = {
+        "mqtt_connected": esp32_tracker["broker_connected"],
+        "db_connected": False,
+        "so_ban_ghi_cam_bien": 0,
+        "so_loai_ca": 0,
+        "so_yeu_cau_cho": 0,
+        "so_lich_su_ai": 0,
+        "esp32_ip": esp32_tracker["ip"],
+        "esp32_last_seen": esp32_tracker["last_seen"] or "Chưa có",
+        "esp32_online": False,
+        "server_time": datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    }
+    
+    # Check ESP online
+    if esp32_tracker["last_seen"]:
+        try:
+            last_dt = datetime.datetime.strptime(esp32_tracker["last_seen"], "%Y-%m-%d %H:%M:%S")
+            if (datetime.datetime.now() - last_dt).total_seconds() < 120:
+                thong_ke["esp32_online"] = True
+        except: pass
+        
+    if conn:
+        try:
+            thong_ke["db_connected"] = True
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM du_lieu_cam_bien")
+            thong_ke["so_ban_ghi_cam_bien"] = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) FROM loai_ca")
+            thong_ke["so_loai_ca"] = cursor.fetchone()[0]
+            
+            try:
+                cursor.execute("SELECT COUNT(*) FROM yeu_cau_them_ca")
+                thong_ke["so_yeu_cau_cho"] = cursor.fetchone()[0]
+            except: pass
+
+            try:
+                cursor.execute("SELECT COUNT(*) FROM lich_su_ai")
+                thong_ke["so_lich_su_ai"] = cursor.fetchone()[0]
+            except: pass
+
+            cursor.close()
+        except Exception as e:
+            logger.error(f"Lỗi thống kê hệ thống: {e}")
+        finally:
+            conn.close()
+    return thong_ke
+
+@app.post("/api/admin/xoa_du_lieu_cu")
+def xoa_du_lieu_cu(so_ngay: int = 30):
+    conn = lay_ket_noi()
+    if not conn: return {"error": "Lỗi kết nối CSDL"}
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM du_lieu_cam_bien WHERE thoi_gian_tao < NOW() - INTERVAL %s DAY", (so_ngay,))
+        so_dong = cursor.rowcount
+        conn.commit()
+        return {"message": f"Đã dọn dẹp thành công {so_dong} bản ghi cảm biến cũ hơn {so_ngay} ngày!"}
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        if 'cursor' in locals() and cursor: cursor.close()
+        conn.close()
+
 
 # --- API CHATBOT TƯ VẤN BẰNG RAG + OLLAMA ---
 class ChatRequest(BaseModel):
@@ -997,11 +1319,26 @@ Nhiệm vụ của bạn:
 # PHÂN HỆ MQTT VÀ HẸN GIỜ TỰ ĐỘNG (BACKGROUND)
 # ==========================================
 
-# 1. Khởi tạo MQTT Client
-mqtt_client = mqtt.Client(client_id="PythonServer_HoCa")
+# Theo dõi trạng thái hoạt động của ESP32 phục vụ trang Admin
+esp32_tracker = {
+    "ip": "Chưa kết nối",
+    "last_seen": None,
+    "online": False,
+    "broker_connected": False
+}
 
-def on_connect(client, userdata, flags, rc):
+# 1. Khởi tạo MQTT Client
+try:
+    mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="PythonServer_HoCa")
+except Exception:
+    try:
+        mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, client_id="PythonServer_HoCa")
+    except Exception:
+        mqtt_client = mqtt.Client(client_id="PythonServer_HoCa")
+
+def on_connect(client, userdata, flags, rc, *args, **kwargs):
     print("✅ Đã kết nối thành công tới Trạm trung chuyển MQTT (EMQX)!")
+    esp32_tracker["broker_connected"] = True
     client.subscribe("hoca_test/sensors")
     client.subscribe("hoca_test/status")
     
@@ -1015,6 +1352,13 @@ def on_message(client, userdata, msg):
     
     try:
         data = json.loads(payload)
+        # Ghi nhận trạng thái kết nối và IP của ESP32
+        esp_ip = data.get('ip')
+        if esp_ip:
+            esp32_tracker["ip"] = esp_ip
+        esp32_tracker["last_seen"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        esp32_tracker["online"] = True
+
         conn = lay_ket_noi()
         if not conn: return
         try:
@@ -1022,6 +1366,15 @@ def on_message(client, userdata, msg):
             
             # 1. Nếu là bản tin trạng thái nút bấm (Đèn/Bơm/Bơm Xả/Bơm Cấp)
             if topic == "hoca_test/status":
+                # Kiểm tra xem người dùng có bấm nút cứng trên ESP32 để Snooze còi không
+                if data.get('snooze') == 1:
+                    global snooze_until
+                    cursor.execute("SELECT coi_snooze_min FROM cai_dat_ho WHERE id=1")
+                    cd_sn = cursor.fetchone()
+                    snooze_m = int(cd_sn.get('coi_snooze_min', 5)) if cd_sn else 5
+                    snooze_until = datetime.datetime.now() + datetime.timedelta(minutes=snooze_m)
+                    print(f"🔕 Người dùng đã bấm nút trên hộp ESP32 để tạm ngưng còi {snooze_m} phút!")
+
                 den = data.get('trang_thai_den', 0)
                 bom = data.get('trang_thai_bom', 0)
                 bom_xa = data.get('trang_thai_bom_xa', 0)
@@ -1033,10 +1386,17 @@ def on_message(client, userdata, msg):
     
             # 2. Xử lý yêu cầu xin cấu hình từ ESP32 khi vừa khởi động
             if data.get('request') == 'GET_CONFIG':
-                cursor.execute("SELECT sieu_am_day, sieu_am_tran FROM cai_dat_ho WHERE id=1")
+                cursor.execute("SELECT sieu_am_day, sieu_am_tran, coi_enable, coi_on_sec, coi_off_sec, coi_snooze_min, ph_offset FROM cai_dat_ho WHERE id=1")
                 cd = cursor.fetchone()
                 if cd:
                     mqtt_client.publish("hoca_test/commands", f"CFG_W_{cd['sieu_am_day']}_{cd['sieu_am_tran']}")
+                    coi_en = 1 if cd.get('coi_enable', 1) else 0
+                    c_on = cd.get('coi_on_sec', 10)
+                    c_off = cd.get('coi_off_sec', 30)
+                    c_sn = cd.get('coi_snooze_min', 5)
+                    mqtt_client.publish("hoca_test/commands", f"CFG_ALARM_{coi_en}_{c_on}_{c_off}_{c_sn}")
+                    p_off = float(cd.get('ph_offset', 0.0))
+                    mqtt_client.publish("hoca_test/commands", f"CFG_PH_{p_off:.2f}")
                 return
                 
             # 3. Nếu là bản tin cảm biến định kỳ
@@ -1047,6 +1407,11 @@ def on_message(client, userdata, msg):
             # Đọc cài đặt hồ để quy đổi phần trăm
             cursor.execute("SELECT * FROM cai_dat_ho WHERE id = 1")
             cai_dat = cursor.fetchone()
+            
+            # Áp dụng bù trừ ph_offset nếu có
+            if cai_dat and 'ph_offset' in cai_dat:
+                offset = float(cai_dat.get('ph_offset', 0.0))
+                do_ph = round(do_ph + offset, 2)
             
             # --- CHUYỂN ĐỔI KHOẢNG CÁCH (CM) SANG PHẦN TRĂM (%) ---
             if cai_dat:
@@ -1064,27 +1429,41 @@ def on_message(client, userdata, msg):
                 
             cursor.execute("INSERT INTO du_lieu_cam_bien (nhiet_do, do_ph, muc_nuoc) VALUES (%s, %s, %s)", (nhiet_do, do_ph, muc_nuoc_pt))
             
-            # --- LOGIC CHU TRÌNH THAY NƯỚC TỰ ĐỘNG ---
+            # --- LOGIC CHU TRÌNH THAY NƯỚC TỰ ĐỘNG THÔNG MINH ---
             if cai_dat:
                 dang_thay = cai_dat.get('dang_thay_nuoc', 0)
                 if dang_thay == 1:
                     muc_tieu_xa = cai_dat.get('muc_tieu_xa', 0.0)
                     bom_xa = cai_dat.get('trang_thai_bom_xa', 0)
                     bom_cap = cai_dat.get('trang_thai_bom_cap', 0)
+                    chu_ky_mac_dinh = cai_dat.get('chu_ky_gui_data', 60)
                     
-                    if bom_xa == 1 and (muc_nuoc_pt <= muc_tieu_xa):
-                        print("✅ Đã xả đủ nước! Chuyển sang bơm cấp.")
+                    # 1. Giai đoạn Bơm Xả: Nước đạt mục tiêu HOẶC cột nước chỉ còn <= 2.5cm (chống cháy bơm)
+                    tu_dong_cap = bool(cai_dat.get('tu_dong_cap_lai', False))
+                    if bom_xa == 1 and (muc_nuoc_pt <= (muc_tieu_xa + 0.5) or chieu_cao_nuoc_hien_tai <= 2.5):
+                        print(f"✅ Đã xả đủ nước ({muc_nuoc_pt:.1f}% / mục tiêu {muc_tieu_xa}%)! Chiều cao nước còn {chieu_cao_nuoc_hien_tai:.1f}cm.")
                         mqtt_client.publish("hoca_test/commands", "BOMXA_OFF")
-                        mqtt_client.publish("hoca_test/commands", "BOMCAP_ON")
-                        cursor.execute("UPDATE cai_dat_ho SET trang_thai_bom_xa=0, trang_thai_bom_cap=1 WHERE id=1")
+                        
+                        # Chỉ cấp lại nếu người dùng bật tu_dong_cap_lai VÀ không phải là xả dọn hồ
+                        if tu_dong_cap and muc_tieu_xa > 1.0:
+                            print("🔄 Người dùng chọn Tự động cấp -> Chuyển sang Bơm Cấp nước mới...")
+                            mqtt_client.publish("hoca_test/commands", "BOMCAP_TARGET_95.0")
+                            cursor.execute("UPDATE cai_dat_ho SET trang_thai_bom_xa=0, trang_thai_bom_cap=1 WHERE id=1")
+                        else:
+                            print("🛑 Hoàn tất xả nước! Dừng chu trình an toàn (Không tự bơm bù).")
+                            cursor.execute("UPDATE cai_dat_ho SET trang_thai_bom_xa=0, dang_thay_nuoc=0 WHERE id=1")
+                            mqtt_client.publish("hoca_test/commands", f"CHU_KY_{chu_ky_mac_dinh}")
                         conn.commit()
                         
-                    elif bom_cap == 1 and (muc_nuoc_pt >= 95.0):
-                        print("✅ Đã cấp đầy nước! Hoàn tất chu trình thay nước.")
+                    # 2. Giai đoạn Bơm Cấp: Nước đầy đạt >= 94% (có dung sai) hoặc cách trần <= 1cm
+                    elif bom_cap == 1 and (muc_nuoc_pt >= 94.0 or chieu_cao_nuoc_hien_tai >= (tran - 1.0)):
+                        print(f"✅ Đã cấp đầy nước ({muc_nuoc_pt:.1f}%)! Hoàn tất chu trình thay nước an toàn.")
                         mqtt_client.publish("hoca_test/commands", "BOMCAP_OFF")
-                        mqtt_client.publish("hoca_test/commands", "BOM_ON")
-                        cursor.execute("UPDATE cai_dat_ho SET trang_thai_bom_cap=0, dang_thay_nuoc=0 WHERE id=1")
+                        mqtt_client.publish("hoca_test/commands", "BOM_ON") # Khởi động lại máy lọc
+                        cursor.execute("UPDATE cai_dat_ho SET trang_thai_bom_cap=0, dang_thay_nuoc=0, trang_thai_bom=1 WHERE id=1")
                         conn.commit()
+                        # Khôi phục lại chu kỳ gửi dữ liệu bình thường (60s)
+                        mqtt_client.publish("hoca_test/commands", f"CHU_KY_{chu_ky_mac_dinh}")
 
             # --- LOGIC CẢNH BÁO THÔNG MINH ---
             if cai_dat:
@@ -1111,9 +1490,16 @@ def on_message(client, userdata, msg):
                         if cb[0] not in cac_loai_da_canh_bao:
                             cursor.execute("INSERT INTO lich_su_canh_bao (loai_canh_bao, noi_dung) VALUES (%s, %s)", (cb[0], cb[1]))
                             
-                    # Bắn còi MQTT
-                    print("🚨 CÓ CẢNH BÁO MÔI TRƯỜNG! Đang rú còi...")
-                    mqtt_client.publish("hoca_test/commands", "ALARM_ON")
+                    # Kiểm tra chế độ bật còi và Snooze
+                    coi_duoc_bat = bool(cai_dat.get('coi_enable', True))
+                    now = datetime.datetime.now()
+                    dang_snooze = (snooze_until is not None and now < snooze_until)
+                    
+                    if coi_duoc_bat and not dang_snooze:
+                        print("🚨 CÓ CẢNH BÁO MÔI TRƯỜNG! Kích hoạt còi chu kỳ...")
+                        mqtt_client.publish("hoca_test/commands", "ALARM_ON")
+                    else:
+                        mqtt_client.publish("hoca_test/commands", "ALARM_OFF")
                 else:
                     # An toàn, tắt còi nếu đang kêu
                     mqtt_client.publish("hoca_test/commands", "ALARM_OFF")
@@ -1228,11 +1614,13 @@ def kiem_tra_hen_gio():
         muc_nuoc_hien_tai = cb['muc_nuoc'] if cb else 100.0
         
         muc_tieu = max(0.0, float(muc_nuoc_hien_tai) - phan_tram_thay)
-        cursor.execute("UPDATE cai_dat_ho SET dang_thay_nuoc=1, muc_tieu_xa=%s WHERE id=1", (muc_tieu,))
+        cursor.execute("UPDATE cai_dat_ho SET dang_thay_nuoc=1, muc_tieu_xa=%s, tu_dong_cap_lai=1, trang_thai_bom_xa=1, trang_thai_bom_cap=0 WHERE id=1", (muc_tieu,))
         conn.commit()
         
+        mqtt_client.publish("hoca_test/commands", "CHU_KY_1")
         mqtt_client.publish("hoca_test/commands", "BOM_OFF") # Tắt máy lọc
-        mqtt_client.publish("hoca_test/commands", "BOMXA_ON") # Bật bơm xả
+        mqtt_client.publish("hoca_test/commands", "BOMCAP_OFF")
+        mqtt_client.publish("hoca_test/commands", f"BOMXA_TARGET_{muc_tieu:.1f}")
 
 # Khởi động MQTT và Scheduler khi ứng dụng chạy
 @app.on_event("startup")
@@ -1256,7 +1644,13 @@ def startup_event():
             "ALTER TABLE cai_dat_ho MODIFY COLUMN hen_gio_den_bat VARCHAR(50)",
             "ALTER TABLE cai_dat_ho MODIFY COLUMN hen_gio_den_tat VARCHAR(50)",
             "ALTER TABLE cai_dat_ho MODIFY COLUMN hen_gio_bom_bat VARCHAR(50)",
-            "ALTER TABLE cai_dat_ho MODIFY COLUMN hen_gio_bom_tat VARCHAR(50)"
+            "ALTER TABLE cai_dat_ho MODIFY COLUMN hen_gio_bom_tat VARCHAR(50)",
+            "ALTER TABLE cai_dat_ho ADD COLUMN coi_on_sec INT DEFAULT 10",
+            "ALTER TABLE cai_dat_ho ADD COLUMN coi_off_sec INT DEFAULT 30",
+            "ALTER TABLE cai_dat_ho ADD COLUMN coi_snooze_min INT DEFAULT 5",
+            "ALTER TABLE cai_dat_ho ADD COLUMN coi_enable BOOLEAN DEFAULT TRUE",
+            "ALTER TABLE cai_dat_ho ADD COLUMN ph_offset FLOAT DEFAULT 0.0",
+            "ALTER TABLE cai_dat_ho ADD COLUMN tu_dong_cap_lai BOOLEAN DEFAULT FALSE"
         ]
         for q in queries:
             try: cursor.execute(q)
@@ -1277,6 +1671,17 @@ def startup_event():
 def shutdown_event():
     mqtt_client.loop_stop()
     mqtt_client.disconnect()
+
+# --- MOUNT STATIC FILES (FRONTEND & UPLOADS) ---
+from fastapi.staticfiles import StaticFiles
+base_dir = os.path.dirname(os.path.abspath(__file__))
+upload_dir = os.path.join(base_dir, "uploads")
+os.makedirs(upload_dir, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=upload_dir), name="uploads")
+
+frontend_dir = os.path.join(base_dir, "..", "frontend")
+if os.path.exists(frontend_dir):
+    app.mount("/frontend", StaticFiles(directory=frontend_dir, html=True), name="frontend")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

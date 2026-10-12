@@ -1,0 +1,34 @@
+BƯỚC 1: Xuất file mã nhị phân (.bin) từ Arduino IDE
+Mở file 
+
+esp32_firmware.ino
+ trong phần mềm Arduino IDE.
+Trên thanh menu trên cùng, bạn chọn:
+Sketch $\rightarrow$ chọn Export Compiled Binary (hoặc nhấn tổ hợp phím tắt Ctrl + Alt + S).
+Chờ Arduino IDE biên dịch khoảng 10 - 30 giây cho đến khi thanh dưới cùng báo Done compiling.
+Để tìm file .bin vừa tạo:
+Trên thanh menu chọn Sketch $\rightarrow$ chọn Show Sketch Folder (hoặc nhấn Ctrl + K).
+Thư mục chứa code sẽ mở ra. Bạn sẽ thấy một file có đuôi .bin (thường có tên dạng esp32_firmware.ino.bin nằm trong thư mục này hoặc thư mục build/...). (Lưu ý: Chỉ chọn file chính ...ino.bin, không chọn các file có chữ bootloader hay partitions).
+BƯỚC 2: Lấy địa chỉ IP của ESP32
+Bạn có thể xem địa chỉ IP của ESP32 bằng 1 trong các cách sau:
+
+Cách 1 (Nhanh nhất): Khi vừa cắm nguồn, màn hình OLED sẽ hiển thị dòng chữ IP trong 2 giây (ví dụ: 192.168.1.15).
+Cách 2: Mở màn hình Serial Monitor trong Arduino IDE (tốc độ 115200 baud), nó sẽ in ra dòng:
+text
+WiFi Da ket noi! IP: 192.168.100.207
+May chu ElegantOTA da san sang tai: http://192.168.100.207/update
+BƯỚC 3: Nạp Code Không Dây Qua Trình Duyệt Web
+Đảm bảo máy tính hoặc điện thoại của bạn đang dùng chung mạng WiFi với hồ cá.
+Mở trình duyệt Web (Chrome, Cốc Cốc, Edge...) và gõ địa chỉ:
+text
+http://<IP_CỦA_ESP32>/update
+(Ví dụ: http://192.168.100.207/update)
+Giao diện màu đen - xanh hiện đại của ElegantOTA sẽ xuất hiện:
+Tại mục chọn loại file: Chọn Firmware (mặc định đã chọn sẵn).
+Bấm vào nút Choose File (Chọn tệp) $\rightarrow$ Tìm và chọn file esp32_firmware.ino.bin bạn vừa xuất ở Bước 1.
+Bấm nút Update (hoặc Upload).
+Bạn sẽ thấy thanh phần trăm tiến trình chạy từ 0% $\rightarrow$ 100% trong khoảng 15 giây.
+Khi hoàn tất, màn hình sẽ thông báo:
+text
+Update Success! Rebooting...
+ESP32 sẽ tự khởi động lại trong 2 giây và bắt đầu chạy ngay bản Firmware mới nhất! Màn hình OLED sẽ sáng lên hiển thị WIFI:OK  SERVER:OK.

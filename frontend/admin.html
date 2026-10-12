@@ -3,148 +3,353 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AquaAI Admin - Quản trị Hệ thống</title>
+    <title>AquaAI Admin - Trung tâm Quản trị & Nạp OTA Không Dây</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="style.css">
     <style>
-        /* Thêm style riêng cho trang Admin để hiển thị Modal (Bảng điền thông tin) */
+        /* CSS Bổ sung cho Trung tâm Quản trị Admin */
         .modal {
             display: none; 
             position: fixed; z-index: 1000; left: 0; top: 0;
             width: 100%; height: 100%; overflow: auto;
-            background-color: rgba(0,0,0,0.6);
-            backdrop-filter: blur(5px);
+            background-color: rgba(0,0,0,0.7);
+            backdrop-filter: blur(8px);
         }
         .modal-content {
-            background: rgba(15, 23, 42, 0.95);
-            margin: 5% auto; padding: 25px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 15px; width: 60%;
+            background: rgba(15, 23, 42, 0.96);
+            margin: 4% auto; padding: 25px;
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 16px; width: 90%; max-width: 680px;
             color: #fff;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6);
         }
-        .close-modal { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
-        .close-modal:hover { color: #fff; }
-        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .close-modal { color: #94a3b8; float: right; font-size: 28px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .close-modal:hover { color: #f87171; }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
         .full-width { grid-column: 1 / -1; }
+        
+        /* Dropzone nạp OTA */
+        .ota-dropzone {
+            border: 2px dashed rgba(56, 189, 248, 0.4);
+            border-radius: 14px;
+            padding: 30px 20px;
+            text-align: center;
+            background: rgba(15, 23, 42, 0.4);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .ota-dropzone:hover, .ota-dropzone.dragover {
+            border-color: #38bdf8;
+            background: rgba(56, 189, 248, 0.08);
+            transform: translateY(-2px);
+        }
+        .ota-progress-container {
+            display: none;
+            margin-top: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            overflow: hidden;
+            height: 18px;
+            position: relative;
+        }
+        .ota-progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #38bdf8, #0ea5e9, #10b981);
+            transition: width 0.2s;
+        }
+        .ota-progress-text {
+            position: absolute;
+            width: 100%;
+            text-align: center;
+            font-size: 11px;
+            line-height: 18px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+        }
+        .ota-log-console {
+            background: #090d16;
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 10px;
+            padding: 12px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 13px;
+            color: #38bdf8;
+            min-height: 90px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 15px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .pulse-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #10b981;
+            box-shadow: 0 0 10px #10b981;
+            margin-right: 6px;
+            animation: pulse-glow 1.5s infinite;
+        }
+        .pulse-dot.offline {
+            background: #f87171;
+            box-shadow: 0 0 10px #f87171;
+            animation: none;
+        }
+        @keyframes pulse-glow {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+        .ota-guide-card {
+            background: rgba(30, 41, 59, 0.4);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px;
+            padding: 18px;
+            margin-top: 20px;
+        }
+        .ota-step {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .ota-step-num {
+            background: #38bdf8;
+            color: #0f172a;
+            font-weight: 800;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
     </style>
 </head>
 <body>
     <div class="dashboard-wrapper">
-        <aside class="sidebar glass-panel">
-            <div class="logo"><i class="fa-solid fa-user-shield text-red"></i> Aqua<span>ADMIN</span></div>
+        <!-- THANH TOPBAR CHO MOBILE -->
+        <header class="mobile-topbar glass-panel">
+            <div class="mobile-logo"><i class="fa-solid fa-user-shield text-red"></i> Aqua<span>ADMIN</span></div>
+            <div style="display:flex; align-items:center; gap: 10px;">
+                <span id="mobile-esp-badge" class="mobile-badge"><span class="pulse-dot offline"></span> ESP32</span>
+                <button id="mobile-menu-btn" class="mobile-menu-btn" aria-label="Mở Menu">
+                    <i class="fa-solid fa-bars"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- LỚP PHỦ MỜ KHI MỞ MENU TRÊN ĐIỆN THOẠI -->
+        <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
+
+        <!-- THANH ĐIỀU HƯỚNG BÊN TRÁI -->
+        <aside id="main-sidebar" class="sidebar glass-panel">
+            <div class="sidebar-header-box">
+                <div class="logo"><i class="fa-solid fa-user-shield text-red"></i> Aqua<span>ADMIN</span></div>
+                <button id="sidebar-close-btn" class="sidebar-close-btn" aria-label="Đóng Menu">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
             <nav>
                 <button class="nav-btn active" data-tab="tab-fish-db"><i class="fa-solid fa-database"></i> Quản lý Từ điển Cá</button>
                 <button class="nav-btn" data-tab="tab-esp32"><i class="fa-solid fa-microchip"></i> Quản lý ESP32 (OTA)</button>
                 <button class="nav-btn" data-tab="tab-ai-history"><i class="fa-solid fa-camera"></i> MLOps & Lịch sử AI</button>
-                <button class="nav-btn" data-tab="tab-user-requests"><i class="fa-solid fa-envelope-open-text"></i> Yêu cầu từ Khách <span style="background: red; color: white; padding: 2px 6px; border-radius: 50%; font-size: 12px; margin-left: 5px;">2</span></button>
+                <button class="nav-btn" data-tab="tab-user-requests"><i class="fa-solid fa-envelope-open-text"></i> Yêu cầu từ Khách <span id="nav-request-badge" style="background: #ef4444; color: white; padding: 2px 7px; border-radius: 50%; font-size: 11px; margin-left: 5px; display: none;">0</span></button>
                 <button class="nav-btn" data-tab="tab-system-health"><i class="fa-solid fa-server"></i> Trạng thái Hệ thống</button>
                 <button class="nav-btn" onclick="window.location.href='index.html'"><i class="fa-solid fa-arrow-right-from-bracket"></i> Về trang Khách</button>
             </nav>
         </aside>
 
+        <!-- KHU VỰC NỘI DUNG CHÍNH -->
         <main class="content-area">
             <!-- TAB 1: QUẢN LÝ TỪ ĐIỂN CÁ -->
             <section id="tab-fish-db" class="tab-pane active">
-                <div class="header-title" style="display: flex; justify-content: space-between; align-items: center;">
+                <div class="header-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
                     <div>
-                        <h2>Từ điển Sinh thái Cá (Knowledge Base)</h2>
-                        <p>Dữ liệu chuẩn khoa học dùng cho hệ chuyên gia AI Fuzzy Logic</p>
+                        <h2>Từ điển Sinh thái Cá (Knowledge Base Đầy Đủ)</h2>
+                        <p>Dữ liệu chuẩn khoa học 21 loài cá dùng cho hệ chuyên gia AI Fuzzy Logic, Tính toán Bioload & Xã hội bầy đàn</p>
                     </div>
-                    <button id="btn-open-add-modal" class="btn-gradient" style="width: auto; padding: 10px 20px; border-radius: 8px;">
-                        <i class="fa-solid fa-plus"></i> Thêm Loài Cá Mới
-                    </button>
+                    <div style="display: flex; gap: 10px;">
+                        <button id="btn-refresh-fish" class="glass-input" style="cursor: pointer; padding: 10px 15px; border-radius: 8px;">
+                            <i class="fa-solid fa-rotate-right"></i> Làm mới
+                        </button>
+                        <button id="btn-open-add-modal" class="btn-gradient" style="width: auto; padding: 10px 20px; border-radius: 8px;">
+                            <i class="fa-solid fa-plus"></i> Thêm Loài Cá Mới
+                        </button>
+                    </div>
+                </div>
+
+                <!-- THANH TÌM KIẾM & BỘ LỌC TỪ ĐIỂN CÁ -->
+                <div class="glass-panel" style="margin-top: 15px; padding: 15px 20px; display: flex; gap: 15px; align-items: center; flex-wrap: wrap; justify-content: space-between;">
+                    <div style="display: flex; gap: 10px; align-items: center; flex: 1; min-width: 250px;">
+                        <i class="fa-solid fa-magnifying-glass text-blue"></i>
+                        <input type="text" id="fish-search-input" class="glass-input" style="width: 100%; padding: 8px 14px;" placeholder="Tìm nhanh theo tên cá, mã loài, tên Latin, tiếng Anh...">
+                    </div>
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <select id="fish-filter-behavior" class="glass-input" style="padding: 8px 12px;">
+                            <option value="">Tất cả Tính cách</option>
+                            <option value="Hòa bình">Hòa bình</option>
+                            <option value="Hung dữ">Hung dữ</option>
+                            <option value="Rỉa vây">Rỉa vây</option>
+                        </select>
+                        <select id="fish-filter-layer" class="glass-input" style="padding: 8px 12px;">
+                            <option value="">Tất cả Tầng bơi</option>
+                            <option value="Mặt">Tầng Mặt</option>
+                            <option value="Giữa">Tầng Giữa</option>
+                            <option value="Đáy">Tầng Đáy</option>
+                        </select>
+                        <span id="fish-count-badge" style="background: rgba(56, 189, 248, 0.2); border: 1px solid #38bdf8; color: #38bdf8; padding: 6px 12px; border-radius: 20px; font-size: 13px; font-weight: 600;">
+                            Đang tải...
+                        </span>
+                    </div>
                 </div>
                 
-                <div class="glass-panel" style="overflow-x: auto;">
-                    <table class="styled-table" style="width: 100%; text-align: left;">
+                <div class="glass-panel" style="overflow-x: auto; margin-top: 15px;">
+                    <table class="styled-table" style="width: 100%; text-align: left; min-width: 850px;">
                         <thead>
                             <tr>
-                                <th>ID</th>
-                                <th>Tên Hiển Thị</th>
-                                <th>Tên Tiếng Anh</th>
-                                <th>Nhiệt độ (Min-Max)</th>
-                                <th>pH (Min-Max)</th>
+                                <th style="width: 45px;">ID</th>
+                                <th>Định Danh & Loài Cá</th>
+                                <th>Môi Trường Sống</th>
+                                <th>Tầng Bơi & Vây</th>
+                                <th>Kích Thước & Bioload</th>
                                 <th>Tính Cách</th>
-                                <th>Hành động</th>
+                                <th>Tài Liệu</th>
+                                <th>Hành Động</th>
                             </tr>
                         </thead>
                         <tbody id="admin-fish-tbody">
-                            <!-- Dữ liệu demo (Sau này sẽ gọi API để render) -->
-                            <tr>
-                                <td>1</td>
-                                <td><strong>Cá Bảy Màu</strong><br><small style="color: #94a3b8">Poecilia reticulata</small></td>
-                                <td>Guppy</td>
-                                <td class="text-orange">22.0 - 28.0 °C</td>
-                                <td class="text-blue">6.5 - 7.5</td>
-                                <td class="text-green">Hòa bình</td>
-                                <td>
-                                    <button class="btn-edit" style="background:none; border:none; color:#38bdf8; cursor:pointer; margin-right: 10px;" title="Sửa"><i class="fa-solid fa-pen-to-square"></i></button>
-                                    <button class="btn-delete" style="background:none; border:none; color:#f87171; cursor:pointer;" title="Xóa"><i class="fa-solid fa-trash"></i></button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>2</td>
-                                <td><strong>Cá La Hán</strong><br><small style="color: #94a3b8">Cichlasoma sp.</small></td>
-                                <td>Flowerhorn</td>
-                                <td class="text-orange">26.0 - 30.0 °C</td>
-                                <td class="text-blue">6.5 - 7.8</td>
-                                <td class="text-red">Hung dữ</td>
-                                <td>
-                                    <button class="btn-edit" style="background:none; border:none; color:#38bdf8; cursor:pointer; margin-right: 10px;"><i class="fa-solid fa-pen-to-square"></i></button>
-                                    <button class="btn-delete" style="background:none; border:none; color:#f87171; cursor:pointer;"><i class="fa-solid fa-trash"></i></button>
-                                </td>
-                            </tr>
+                            <tr><td colspan="8" class="text-center" style="padding: 30px;"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải dữ liệu từ máy chủ...</td></tr>
                         </tbody>
                     </table>
                 </div>
             </section>
 
-            <!-- TAB 2: QUẢN LÝ ESP32 -->
+            <!-- TAB 2: QUẢN LÝ ESP32 & NẠP OTA TỪ XA -->
             <section id="tab-esp32" class="tab-pane">
-                <div class="header-title">
-                    <h2>Quản trị Thiết bị Đầu cuối (ESP32)</h2>
-                    <p>Phát triển chức năng cập nhật Firmware OTA và khởi động lại từ xa.</p>
+                <div class="header-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                    <div>
+                        <h2>Quản trị Thiết bị IoT (ESP32) & Nạp OTA Không Dây</h2>
+                        <p>Theo dõi IP, khởi động lại từ xa và nạp Firmware .bin trực tiếp qua mạng WiFi không cần cáp USB</p>
+                    </div>
+                    <button id="btn-refresh-esp-status" class="glass-input" style="cursor: pointer; padding: 10px 15px; border-radius: 8px;">
+                        <i class="fa-solid fa-rotate-right"></i> Cập nhật trạng thái
+                    </button>
                 </div>
-                <div class="glass-panel text-center" style="padding: 50px;">
-                    <i class="fa-solid fa-microchip icon-huge text-blue" style="font-size: 4rem;"></i>
-                    <h3 class="mt-3">Module OTA Update đang phát triển</h3>
-                    <p style="color: #94a3b8;">Chức năng này sẽ được code C++ cho ESP32 trước khi ráp API Web.</p>
-                    <button class="btn-gradient mt-3" style="width: auto; padding: 10px 30px; border-radius: 8px;">Restart ESP32 (Gửi lệnh MQTT)</button>
+
+                <!-- THẺ TRẠNG THÁI THIẾT BỊ -->
+                <div class="grid-2col" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; margin-top: 15px;">
+                    <div class="glass-panel">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <h3 style="font-size: 1.1rem; color: #38bdf8;"><i class="fa-solid fa-microchip"></i> Mạch Vi điều khiển ESP32</h3>
+                            <span id="esp-status-badge" style="font-size: 12px; font-weight: bold;"><span class="pulse-dot offline"></span> Đang kiểm tra...</span>
+                        </div>
+                        <div style="margin-top: 15px; font-size: 14px; line-height: 1.8;">
+                            <div><strong style="color: #94a3b8;">Địa chỉ IP Mạng LAN:</strong> <span id="esp-display-ip" style="color: #38bdf8; font-weight: bold; font-family: monospace; font-size: 15px;">Chưa phát hiện</span></div>
+                            <div><strong style="color: #94a3b8;">Tín hiệu cuối cùng:</strong> <span id="esp-display-last-seen">--</span></div>
+                            <div><strong style="color: #94a3b8;">Cổng nạp OTA:</strong> <span style="color: #10b981;">http://&lt;IP_ESP32&gt;/update</span></div>
+                        </div>
+                        <div style="margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap;">
+                            <button id="btn-restart-esp" class="btn-gradient" style="background: linear-gradient(135deg, #f59e0b, #ef4444); padding: 8px 16px; font-size: 13px; border-radius: 8px; width: auto;">
+                                <i class="fa-solid fa-power-off"></i> Khởi động lại ESP32 (MQTT)
+                            </button>
+                            <a id="btn-open-ota-page" href="#" target="_blank" class="glass-input" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px; border-radius: 8px; color: #38bdf8;">
+                                <i class="fa-solid fa-arrow-up-right-from-square"></i> Mở Web OTA Trực tiếp
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="glass-panel">
+                        <h3 style="font-size: 1.1rem; color: #38bdf8;"><i class="fa-solid fa-cloud-arrow-up"></i> Nạp Firmware (.bin) Không Dây</h3>
+                        <p style="font-size: 13px; color: #94a3b8; margin-top: 5px;">Truyền file mã máy được biên dịch từ Arduino IDE trực tiếp vào bộ nhớ Flash của ESP32 qua WiFi.</p>
+                        
+                        <div style="margin-top: 12px;">
+                            <label style="font-size: 12px; color: #94a3b8;">Địa chỉ IP Đích của ESP32:</label>
+                            <input type="text" id="target-esp-ip" class="glass-input" style="width: 100%; margin-top: 4px; font-family: monospace;" placeholder="VD: 192.168.1.15">
+                        </div>
+
+                        <!-- Dropzone chọn file .bin -->
+                        <div id="ota-dropzone" class="ota-dropzone" style="margin-top: 12px;">
+                            <i class="fa-solid fa-file-code" style="font-size: 2.2rem; color: #38bdf8;"></i>
+                            <div style="margin-top: 8px; font-weight: bold;" id="ota-file-name">Kéo thả file .bin vào đây hoặc bấm để chọn</div>
+                            <div style="font-size: 12px; color: #94a3b8; margin-top: 3px;">Hỗ trợ file *.bin (Compiled Binary từ Arduino IDE)</div>
+                            <input type="file" id="ota-file-input" accept=".bin" style="display: none;">
+                        </div>
+
+                        <!-- Thanh tiến trình upload -->
+                        <div id="ota-progress-container" class="ota-progress-container">
+                            <div id="ota-progress-bar" class="ota-progress-bar"></div>
+                            <div id="ota-progress-text" class="ota-progress-text">0%</div>
+                        </div>
+
+                        <button id="btn-start-ota" class="btn-gradient" style="margin-top: 15px; width: 100%; padding: 11px; border-radius: 8px;" disabled>
+                            <i class="fa-solid fa-bolt"></i> Bắt đầu Nạp Firmware OTA
+                        </button>
+
+                        <div id="ota-log-console" class="ota-log-console">Sẵn sàng. Hãy chọn file .bin và nhấn nạp...</div>
+                    </div>
+                </div>
+
+                <!-- HƯỚNG DẪN BIÊN DỊCH FILE BIN -->
+                <div class="glass-panel ota-guide-card">
+                    <h3 style="font-size: 1.05rem; color: #fbbf24; margin-bottom: 15px;">
+                        <i class="fa-solid fa-circle-question"></i> Hướng dẫn xuất file .bin từ Arduino IDE để nạp không dây
+                    </h3>
+                    <div class="ota-step">
+                        <div class="ota-step-num">1</div>
+                        <div>Mở dự án <code>esp32_firmware/esp32_firmware.ino</code> trong Arduino IDE.</div>
+                    </div>
+                    <div class="ota-step">
+                        <div class="ota-step-num">2</div>
+                        <div>Chọn đúng Bo mạch <strong>ESP32 Dev Module</strong> trong mục <em>Tools -> Board</em>.</div>
+                    </div>
+                    <div class="ota-step">
+                        <div class="ota-step-num">3</div>
+                        <div>Nhấn menu <strong>Sketch</strong> -> Chọn <strong>Export Compiled Binary</strong> (hoặc nhấn phím tắt <code>Ctrl + Alt + S</code>).</div>
+                    </div>
+                    <div class="ota-step">
+                        <div class="ota-step-num">4</div>
+                        <div>Sau khi IDE thông báo <em>"Done compiling"</em>, tìm file có đuôi <code>.bin</code> (thường nằm trong thư mục <code>build/...</code> hoặc trong cùng thư mục sketch).</div>
+                    </div>
+                    <div class="ota-step">
+                        <div class="ota-step-num">5</div>
+                        <div>Chọn file <code>.bin</code> đó tại ô Nạp Firmware ở trên và nhấn <strong>Bắt đầu Nạp Firmware OTA</strong>. Mạch ESP32 sẽ tự cập nhật và tự khởi động lại trong 5 giây!</div>
+                    </div>
                 </div>
             </section>
 
             <!-- TAB 3: MLOps & LỊCH SỬ AI -->
             <section id="tab-ai-history" class="tab-pane">
-                <div class="header-title">
-                    <h2>MLOps: Quản lý Hình ảnh & Cải thiện Mô hình AI</h2>
-                    <p>Thu thập dữ liệu dự đoán sai từ người dùng để lưu vào Dataset và Train lại (Re-train) mô hình YOLOv8.</p>
+                <div class="header-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                    <div>
+                        <h2>MLOps: Quản lý Hình ảnh & Cải thiện Mô hình AI YOLOv8</h2>
+                        <p>Lịch sử nhận diện thực tế từ người dùng giúp thu thập Dataset để huấn luyện (Re-train) phiên bản AI mới</p>
+                    </div>
+                    <button id="btn-refresh-ai-history" class="glass-input" style="cursor: pointer; padding: 10px 15px; border-radius: 8px;">
+                        <i class="fa-solid fa-rotate-right"></i> Làm mới
+                    </button>
                 </div>
                 
-                <div class="glass-panel" style="overflow-x: auto;">
-                    <table class="styled-table" style="width: 100%; text-align: left;">
+                <div class="glass-panel" style="overflow-x: auto; margin-top: 15px;">
+                    <table class="styled-table" style="width: 100%; text-align: left; min-width: 650px;">
                         <thead>
                             <tr>
                                 <th>Thời gian</th>
-                                <th>Hình ảnh tải lên</th>
+                                <th>Ảnh chụp</th>
                                 <th>AI Nhận diện</th>
-                                <th>Độ tự tin (%)</th>
-                                <th>Đánh giá của Admin</th>
+                                <th>Độ tự tin</th>
+                                <th>Tương thích hồ</th>
+                                <th>Hành động</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            <!-- Demo data -->
-                            <tr>
-                                <td>26/09/2026 15:30</td>
-                                <td><img src="https://via.placeholder.com/60" alt="Cá" style="border-radius: 5px;"></td>
-                                <td class="text-blue">Cá Bảy Màu</td>
-                                <td>85%</td>
-                                <td>
-                                    <button class="btn-gradient" style="padding: 5px 10px; font-size: 12px; margin-right: 5px;"><i class="fa-solid fa-check"></i> Đúng</button>
-                                    <button style="background: rgba(248, 113, 113, 0.2); border: 1px solid #f87171; color: #f87171; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 12px;"><i class="fa-solid fa-download"></i> Tải về làm Dataset</button>
-                                </td>
-                            </tr>
+                        <tbody id="admin-ai-tbody">
+                            <tr><td colspan="6" class="text-center" style="padding: 30px;"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải dữ liệu MLOps...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -152,35 +357,80 @@
 
             <!-- TAB 4: TRẠNG THÁI HỆ THỐNG -->
             <section id="tab-system-health" class="tab-pane">
-                <div class="header-title">
-                    <h2>Thống kê Máy chủ & CSDL</h2>
-                    <p>Giám sát sức khỏe toàn hệ thống IoT và dọn dẹp rác.</p>
+                <div class="header-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                    <div>
+                        <h2>Thống kê Máy chủ, IoT & Cơ sở dữ liệu</h2>
+                        <p>Giám sát sức khỏe hạ tầng, kết nối MQTT, MySQL và công cụ dọn dẹp bộ nhớ</p>
+                    </div>
+                    <button id="btn-refresh-health" class="glass-input" style="cursor: pointer; padding: 10px 15px; border-radius: 8px;">
+                        <i class="fa-solid fa-rotate-right"></i> Làm mới thống kê
+                    </button>
                 </div>
                 
-                <div class="form-grid">
-                    <div class="glass-panel text-center">
-                        <i class="fa-solid fa-network-wired text-green" style="font-size: 2rem;"></i>
-                        <h3>Trạm MQTT (EMQX)</h3>
-                        <p class="text-green" style="font-weight: bold;">ĐANG HOẠT ĐỘNG</p>
+                <div class="form-grid" style="margin-top: 15px;">
+                    <div class="glass-panel text-center" style="padding: 25px;">
+                        <i class="fa-solid fa-network-wired text-green" style="font-size: 2.2rem;"></i>
+                        <h3 style="margin-top: 10px;">Trạm MQTT (EMQX Broker)</h3>
+                        <p id="stat-mqtt-status" class="text-green" style="font-weight: bold; margin-top: 5px;">ĐANG HOẠT ĐỘNG</p>
+                        <small style="color: #94a3b8;">broker.emqx.io:1883</small>
                     </div>
-                    <div class="glass-panel text-center">
-                        <i class="fa-solid fa-database text-blue" style="font-size: 2rem;"></i>
-                        <h3>Dung lượng Database</h3>
-                        <p>15.420 bản ghi cảm biến</p>
-                        <button class="btn-gradient mt-3" style="width: 100%;"><i class="fa-solid fa-broom"></i> Xóa dữ liệu cũ (>30 ngày)</button>
+                    <div class="glass-panel text-center" style="padding: 25px;">
+                        <i class="fa-solid fa-database text-blue" style="font-size: 2.2rem;"></i>
+                        <h3 style="margin-top: 10px;">Cơ sở dữ liệu (MySQL)</h3>
+                        <p id="stat-db-status" class="text-green" style="font-weight: bold; margin-top: 5px;">ĐÃ KẾT NỐI</p>
+                        <small style="color: #94a3b8;">Clever Cloud / Localhost</small>
+                    </div>
+                    <div class="glass-panel text-center" style="padding: 25px;">
+                        <i class="fa-solid fa-chart-line text-orange" style="font-size: 2.2rem;"></i>
+                        <h3 style="margin-top: 10px;">Dữ liệu Cảm biến</h3>
+                        <p id="stat-sensors-count" style="font-size: 1.5rem; font-weight: 800; color: #38bdf8; margin-top: 5px;">-- bản ghi</p>
+                        <small style="color: #94a3b8;">Nhiệt độ, pH, Mực nước</small>
+                    </div>
+                    <div class="glass-panel text-center" style="padding: 25px;">
+                        <i class="fa-solid fa-fish text-purple" style="font-size: 2.2rem; color: #a855f7;"></i>
+                        <h3 style="margin-top: 10px;">Từ điển Loài cá</h3>
+                        <p id="stat-fish-count" style="font-size: 1.5rem; font-weight: 800; color: #a855f7; margin-top: 5px;">-- loài</p>
+                        <small style="color: #94a3b8;">Sẵn sàng tư vấn AI Fuzzy</small>
+                    </div>
+                </div>
+
+                <!-- CÔNG CỤ DỌN DẸP DỮ LIỆU CŨ -->
+                <div class="glass-panel" style="margin-top: 20px; padding: 25px;">
+                    <h3 style="color: #f59e0b;"><i class="fa-solid fa-broom"></i> Tối ưu hóa Bộ nhớ & Dọn dẹp Dữ liệu Cũ</h3>
+                    <p style="font-size: 13px; color: #94a3b8; margin-top: 5px;">
+                        Dữ liệu cảm biến được ESP32 gửi liên tục mỗi 5-60 giây. Để tránh làm chậm cơ sở dữ liệu Clever Cloud, bạn có thể xóa các bản ghi cảm biến cũ.
+                    </p>
+                    <div style="display: flex; gap: 15px; align-items: center; margin-top: 15px; flex-wrap: wrap;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <label for="cleanup-days" style="font-size: 14px;">Xóa dữ liệu cảm biến cũ hơn:</label>
+                            <select id="cleanup-days" class="glass-input" style="padding: 8px 12px;">
+                                <option value="7">7 ngày</option>
+                                <option value="15">15 ngày</option>
+                                <option value="30" selected>30 ngày</option>
+                                <option value="60">60 ngày</option>
+                            </select>
+                        </div>
+                        <button id="btn-run-cleanup" class="btn-gradient" style="background: linear-gradient(135deg, #ef4444, #dc2626); width: auto; padding: 9px 22px; border-radius: 8px;">
+                            <i class="fa-solid fa-trash-can"></i> Dọn dẹp CSDL ngay
+                        </button>
                     </div>
                 </div>
             </section>
 
             <!-- TAB 5: YÊU CẦU TỪ KHÁCH HÀNG -->
             <section id="tab-user-requests" class="tab-pane">
-                <div class="header-title">
-                    <h2>Yêu cầu Cập nhật Từ điển</h2>
-                    <p>Danh sách các loài cá khách hàng tìm kiếm nhưng chưa có trong hệ thống.</p>
+                <div class="header-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                    <div>
+                        <h2>Yêu cầu Cập nhật Từ điển từ Khách hàng</h2>
+                        <p>Danh sách các loài cá khách hàng tìm kiếm nhưng chưa có trong hệ thống</p>
+                    </div>
+                    <button id="btn-refresh-requests" class="glass-input" style="cursor: pointer; padding: 10px 15px; border-radius: 8px;">
+                        <i class="fa-solid fa-rotate-right"></i> Làm mới
+                    </button>
                 </div>
                 
-                <div class="glass-panel" style="overflow-x: auto;">
-                    <table class="styled-table" style="width: 100%; text-align: left;">
+                <div class="glass-panel" style="overflow-x: auto; margin-top: 15px;">
+                    <table class="styled-table" style="width: 100%; text-align: left; min-width: 600px;">
                         <thead>
                             <tr>
                                 <th>Thời gian</th>
@@ -189,26 +439,8 @@
                                 <th>Hành động</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            <!-- Demo data -->
-                            <tr>
-                                <td>26/09/2026 16:45</td>
-                                <td><strong>Cá Bình Tích</strong></td>
-                                <td><span style="color: #fbbf24;"><i class="fa-solid fa-clock"></i> Chờ xử lý</span></td>
-                                <td>
-                                    <button class="btn-gradient" style="padding: 5px 10px; font-size: 12px; margin-right: 5px;"><i class="fa-solid fa-plus"></i> Thêm vào DB</button>
-                                    <button style="background: rgba(248, 113, 113, 0.2); border: 1px solid #f87171; color: #f87171; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 12px;"><i class="fa-solid fa-trash"></i> Bỏ qua</button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>26/09/2026 10:15</td>
-                                <td><strong>Cá Ping Pong</strong></td>
-                                <td><span style="color: #fbbf24;"><i class="fa-solid fa-clock"></i> Chờ xử lý</span></td>
-                                <td>
-                                    <button class="btn-gradient" style="padding: 5px 10px; font-size: 12px; margin-right: 5px;"><i class="fa-solid fa-plus"></i> Thêm vào DB</button>
-                                    <button style="background: rgba(248, 113, 113, 0.2); border: 1px solid #f87171; color: #f87171; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 12px;"><i class="fa-solid fa-trash"></i> Bỏ qua</button>
-                                </td>
-                            </tr>
+                        <tbody id="admin-requests-tbody">
+                            <tr><td colspan="4" class="text-center" style="padding: 30px;"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải danh sách yêu cầu...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -241,7 +473,7 @@
                     <input type="text" id="frm-ten-khoa-hoc" class="glass-input" style="width: 100%">
                 </div>
 
-                <!-- Group 2: Sinh thái -->
+                <!-- Group 2: Môi trường sống -->
                 <div class="input-group">
                     <label>Nhiệt độ Yêu cầu (°C)</label><br>
                     <input type="number" id="frm-nhiet-min" class="glass-input" style="width: 45%" placeholder="Min" step="0.1" required> -
@@ -252,23 +484,59 @@
                     <input type="number" id="frm-ph-min" class="glass-input" style="width: 45%" placeholder="Min" step="0.1" required> -
                     <input type="number" id="frm-ph-max" class="glass-input" style="width: 45%" placeholder="Max" step="0.1" required>
                 </div>
-                
+
+                <!-- Group 3: Sinh thái & Tải trọng Bioload -->
                 <div class="input-group">
-                    <label>Thể tích tối thiểu cho 1 con (Lít)</label>
-                    <input type="number" id="frm-the-tich" class="glass-input" style="width: 100%" value="5.0" step="0.1">
+                    <label>Kích thước trưởng thành (cm)</label>
+                    <input type="number" id="frm-kich-thuoc" class="glass-input" style="width: 100%" value="5.0" step="0.5" required>
                 </div>
                 <div class="input-group">
-                    <label>Tính cách bầy đàn</label>
-                    <select id="frm-tinh-cach" class="glass-input" style="width: 100%;">
-                        <option value="Hòa bình">Hòa bình (Bơi chung được)</option>
-                        <option value="Rỉa vây">Rỉa vây (Hay cắn trộm)</option>
-                        <option value="Hung dữ">Hung dữ (Săn mồi/Cắn lộn)</option>
+                    <label>Thể tích tối thiểu cho 1 con (Lít)</label>
+                    <input type="number" id="frm-the-tich" class="glass-input" style="width: 100%" value="5.0" step="0.5" required>
+                </div>
+                
+                <div class="input-group">
+                    <label>Hệ số thải bẩn (Bioload)</label>
+                    <input type="number" id="frm-he-so-bioload" class="glass-input" style="width: 100%" value="1.0" step="0.1" placeholder="1.0 (nhỏ=0.5, to=2.5)">
+                </div>
+                <div class="input-group">
+                    <label>Số lượng bầy đàn tối thiểu (con)</label>
+                    <input type="number" id="frm-bay-min" class="glass-input" style="width: 100%" value="1" min="1" step="1">
+                </div>
+
+                <div class="input-group">
+                    <label>Tầng bơi sinh thái</label>
+                    <select id="frm-tang-boi" class="glass-input" style="width: 100%;">
+                        <option value="Mặt">Tầng Mặt (Nổi phía trên)</option>
+                        <option value="Giữa" selected>Tầng Giữa (Bơi lượn trung tâm)</option>
+                        <option value="Đáy">Tầng Đáy (Kiếm ăn sát đáy)</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>Kiểu vây cá</label>
+                    <select id="frm-kieu-vay" class="glass-input" style="width: 100%;">
+                        <option value="Ngắn" selected>Vây Ngắn (Bơi nhanh, ít bị rỉa)</option>
+                        <option value="Dài">Vây Dài / Thướt tha (Dễ bị cá khác cắn)</option>
                     </select>
                 </div>
 
                 <div class="input-group full-width">
-                    <label>Nguồn trích dẫn học thuật (FishBase URL)</label>
+                    <label>Tính cách bầy đàn</label>
+                    <select id="frm-tinh-cach" class="glass-input" style="width: 100%;">
+                        <option value="Hòa bình">Hòa bình (Hiền lành, bơi chung tốt)</option>
+                        <option value="Rỉa vây">Rỉa vây (Hay cắn trộm vây cá khác)</option>
+                        <option value="Hung dữ">Hung dữ (Săn mồi / Cắn nhau dữ dội)</option>
+                    </select>
+                </div>
+
+                <!-- Group 4: Tài liệu & Mô tả -->
+                <div class="input-group full-width">
+                    <label>Nguồn trích dẫn học thuật (FishBase / SeriouslyFish URL)</label>
                     <input type="text" id="frm-nguon" class="glass-input" style="width: 100%" placeholder="https://www.seriouslyfish.com/...">
+                </div>
+                <div class="input-group full-width">
+                    <label>Mô tả tập tính sinh thái học</label>
+                    <textarea id="frm-mo-ta" class="glass-input" style="width: 100%; min-height: 60px;" placeholder="Ghi chú thêm về tập tính, ánh sáng, cây thủy sinh phù hợp..."></textarea>
                 </div>
 
                 <div class="full-width" style="text-align: right; margin-top: 20px;">

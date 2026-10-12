@@ -1,3 +1,29 @@
+// ---- LOGIC ĐIỀU HƯỚNG MOBILE & DRAWER ----
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+const sidebarCloseBtn = document.getElementById('sidebar-close-btn');
+const mainSidebar = document.getElementById('main-sidebar');
+const sidebarBackdrop = document.getElementById('sidebar-backdrop');
+
+function openMobileSidebar() {
+    if (mainSidebar && sidebarBackdrop) {
+        mainSidebar.classList.add('active');
+        sidebarBackdrop.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+function closeMobileSidebar() {
+    if (mainSidebar && sidebarBackdrop) {
+        mainSidebar.classList.remove('active');
+        sidebarBackdrop.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+}
+
+if (mobileMenuBtn) mobileMenuBtn.addEventListener('click', openMobileSidebar);
+if (sidebarCloseBtn) sidebarCloseBtn.addEventListener('click', closeMobileSidebar);
+if (sidebarBackdrop) sidebarBackdrop.addEventListener('click', closeMobileSidebar);
+
 // ---- LOGIC CHUYỂN TAB (SPA) ----
 const navBtns = document.querySelectorAll('.nav-btn');
 const tabPanes = document.querySelectorAll('.tab-pane');
@@ -12,7 +38,31 @@ navBtns.forEach(btn => {
         document.getElementById(targetId).classList.add('active');
 
         if(targetId === 'tab-overview') renderChart();
+
+        // Tự động đóng menu trên màn hình điện thoại khi chọn tab
+        if (window.innerWidth <= 992) {
+            closeMobileSidebar();
+        }
     });
+});
+
+// Hỗ trợ chạm để bật/tắt Tooltip giải thích trên màn hình cảm ứng điện thoại
+document.addEventListener('click', (e) => {
+    const isIcon = e.target.classList.contains('tooltip-icon');
+    document.querySelectorAll('.tooltip-box').forEach(box => {
+        if (!isIcon || box.previousElementSibling !== e.target) {
+            box.style.visibility = '';
+            box.style.opacity = '';
+        }
+    });
+    if (isIcon) {
+        const box = e.target.nextElementSibling;
+        if (box && box.classList.contains('tooltip-box')) {
+            const isVisible = box.style.visibility === 'visible';
+            box.style.visibility = isVisible ? 'hidden' : 'visible';
+            box.style.opacity = isVisible ? '0' : '1';
+        }
+    }
 });
 
 // ---- LOGIC CHUYỂN MODE TƯ VẤN (AI / MANUAL) ----
@@ -39,12 +89,16 @@ const uploadZone = document.getElementById('upload-zone');
 const fileInput = document.getElementById('file-input');
 const previewImg = document.getElementById('preview-image');
 const analyzeBtn = document.getElementById('analyze-btn');
-// --- CẤU HÌNH KẾT NỐI SERVER ---
-// Mở comment dòng dưới nếu chạy trên máy tính (Local)
-const API_BASE_URL = 'http://localhost:8000';
 
-// Mở comment dòng dưới nếu đã úp Server Python lên mạng (thay bằng địa chỉ thật)
-// const API_BASE_URL = 'https://dia-chi-server-cua-ban.com';
+// --- CẤU HÌNH KẾT NỐI SERVER (TỰ ĐỘNG THÍCH ỨNG TRÊN PC / ĐIỆN THOẠI) ---
+let API_BASE_URL = 'http://localhost:8000';
+if (window.location.protocol.startsWith('http')) {
+    if (window.location.port === '8000') {
+        API_BASE_URL = window.location.origin;
+    } else if (window.location.hostname) {
+        API_BASE_URL = `${window.location.protocol}//${window.location.hostname}:8000`;
+    }
+}
 
 const loading = document.getElementById('loading');
 const resultSection = document.getElementById('result-section');
@@ -363,24 +417,87 @@ let toggleTimeout = null;
 
 // Nút "Bắt đầu thay" (Thay nước ngay lập tức)
 const btnQuickWater = document.getElementById('btn-quick-water');
+const drainOnlyCb = document.getElementById('quick-water-drain-only');
+const autoRefillCb = document.getElementById('quick-water-auto-refill');
+
+if (drainOnlyCb && autoRefillCb) {
+    drainOnlyCb.addEventListener('change', () => {
+        if (drainOnlyCb.checked) {
+            autoRefillCb.checked = false;
+            autoRefillCb.disabled = true;
+        } else {
+            autoRefillCb.disabled = false;
+        }
+    });
+}
+
 if(btnQuickWater) {
     btnQuickWater.addEventListener('click', async () => {
         const pct = parseFloat(document.getElementById('quick-water-percent').value);
-        if(!pct || pct <= 0 || pct >= 100) { alert("Nhập % cần thay không hợp lệ!"); return; }
-        if(!confirm(`Xác nhận rút ${pct}% nước hồ ngay lập tức? Máy Lọc sẽ tạm ngắt an toàn.`)) return;
+        const drainOnly = drainOnlyCb ? drainOnlyCb.checked : false;
+        const autoRefill = autoRefillCb ? autoRefillCb.checked : false;
+        
+        if(!pct || pct <= 0 || pct > 100) { alert("Nhập % cần thay không hợp lệ (từ 5% đến 100%)!"); return; }
+        
+        let confirmMsg = `Xác nhận rút ${pct}% nước hồ ngay lập tức?\n` + (autoRefill ? "👉 Hệ thống sẽ TỰ ĐỘNG BƠM CẤP ĐẦY LẠI sau khi xả xong." : "👉 Hệ thống sẽ CHỈ RÚT NƯỚC rồi dừng hẳn (Không tự bơm bù).");
+        if (drainOnly || pct >= 95) {
+            confirmMsg = `⚠️ BẠN ĐANG CHỌN XẢ DỌN HỒ!\nHệ thống sẽ rút nước tới mức an toàn đáy (2.5cm) và KHÔNG tự bơm cấp lại.\nVui lòng đảm bảo CÁ ĐÃ ĐƯỢC VỚT RA NGOÀI an toàn.\n\nXác nhận bắt đầu xả?`;
+        }
+        if(!confirm(confirmMsg)) return;
         
         try {
             const res = await fetch(API_BASE_URL + '/api/thay_nuoc_ngay', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phan_tram: pct })
+                body: JSON.stringify({ phan_tram: pct, chi_xa_can: drainOnly, tu_dong_cap_lai: autoRefill })
             });
+            const data = await res.json();
             if(res.ok) {
                 const s = document.getElementById('quick-water-status');
-                s.classList.remove('hidden');
-                setTimeout(() => s.classList.add('hidden'), 5000);
+                if (s) {
+                    s.innerText = data.message || "Đang chạy chu trình thay nước...";
+                    s.classList.remove('hidden');
+                    setTimeout(() => s.classList.add('hidden'), 10000);
+                }
+            } else {
+                alert(data.error || "Lỗi khi kích hoạt thay nước!");
             }
-        } catch(e) {}
+        } catch(e) {
+            alert("Lỗi kết nối khi gửi yêu cầu thay nước!");
+        }
+    });
+}
+
+// Đồng bộ hoá Giờ 24h & Chu kỳ thay nước tự động
+const lichGioH = document.getElementById('set-lich-gio-h');
+const lichGioM = document.getElementById('set-lich-gio-m');
+const lichGioHidden = document.getElementById('set-lich-gio');
+const lichChuKy = document.getElementById('set-lich-chu-ky');
+const lichThuInput = document.getElementById('set-lich-thu');
+const lichThuWrap = document.getElementById('lich-thu-wrap');
+
+function updateLichGio() {
+    if (lichGioH && lichGioM && lichGioHidden) {
+        lichGioHidden.value = `${lichGioH.value}:${lichGioM.value}`;
+    }
+}
+
+if (lichGioH && lichGioM) {
+    lichGioH.addEventListener('change', updateLichGio);
+    lichGioM.addEventListener('change', updateLichGio);
+}
+
+if (lichChuKy && lichThuInput && lichThuWrap) {
+    lichChuKy.addEventListener('change', () => {
+        if (lichChuKy.value === 'daily') {
+            lichThuInput.value = '2,3,4,5,6,7,8';
+            lichThuWrap.classList.add('hidden');
+        } else {
+            lichThuWrap.classList.remove('hidden');
+            if (lichThuInput.value === '2,3,4,5,6,7,8' || !lichThuInput.value) {
+                lichThuInput.value = '2,4,6';
+            }
+        }
     });
 }
 
@@ -425,9 +542,46 @@ async function loadSettings() {
             document.getElementById('set-sieu-am-day').value = data.sieu_am_day || 21;
             document.getElementById('set-sieu-am-tran').value = data.sieu_am_tran || 3;
             document.getElementById('set-phan-tram-thay').value = data.phan_tram_thay || 0;
-            if(data.lich_thay_nuoc_gio) document.getElementById('set-lich-gio').value = data.lich_thay_nuoc_gio.substring(0, 5);
-            document.getElementById('set-lich-thu').value = data.lich_thay_nuoc_thu || '';
             
+            // Giờ kích hoạt thay nước (24h)
+            if(data.lich_thay_nuoc_gio) {
+                const timeStr = data.lich_thay_nuoc_gio.substring(0, 5);
+                document.getElementById('set-lich-gio').value = timeStr;
+                const parts = timeStr.split(':');
+                if (parts.length === 2) {
+                    if (lichGioH) lichGioH.value = parts[0];
+                    if (lichGioM) {
+                        let mVal = parts[1];
+                        let foundM = false;
+                        for (let opt of lichGioM.options) {
+                            if (opt.value === mVal) { foundM = true; break; }
+                        }
+                        lichGioM.value = foundM ? mVal : '00';
+                    }
+                }
+            }
+            
+            // Chu kỳ lặp lại (Mỗi 24 giờ vs Tùy chọn Thứ)
+            const lThu = data.lich_thay_nuoc_thu || '2,3,4,5,6,7,8';
+            document.getElementById('set-lich-thu').value = lThu;
+            if (lichChuKy && lichThuWrap) {
+                if (lThu === '2,3,4,5,6,7,8' || !lThu) {
+                    lichChuKy.value = 'daily';
+                    lichThuWrap.classList.add('hidden');
+                } else {
+                    lichChuKy.value = 'custom';
+                    lichThuWrap.classList.remove('hidden');
+                }
+            }
+            
+            // Cấu hình Còi cảnh báo
+            if(document.getElementById('set-coi-enable')) {
+                document.getElementById('set-coi-enable').checked = (data.coi_enable !== undefined ? Boolean(data.coi_enable) : true);
+            }
+            if(document.getElementById('set-coi-on')) document.getElementById('set-coi-on').value = data.coi_on_sec || 10;
+            if(document.getElementById('set-coi-off')) document.getElementById('set-coi-off').value = data.coi_off_sec || 30;
+            if(document.getElementById('set-coi-snooze')) document.getElementById('set-coi-snooze').value = data.coi_snooze_min || 5;
+
             // Kích hoạt sự kiện change để ẩn/hiện đúng UI
             document.getElementById('set-che-do-den').dispatchEvent(new Event('change'));
             document.getElementById('set-che-do-bom').dispatchEvent(new Event('change'));
@@ -441,6 +595,7 @@ async function loadSettings() {
 
 // Hàm Lưu cài đặt chung
 async function saveSettings() {
+    updateLichGio();
     const reqData = {
         nhiet_do_min: parseFloat(document.getElementById('set-temp-min').value) || 24,
         nhiet_do_max: parseFloat(document.getElementById('set-temp-max').value) || 28,
@@ -469,8 +624,13 @@ async function saveSettings() {
         sieu_am_day: parseFloat(document.getElementById('set-sieu-am-day').value) || 21,
         sieu_am_tran: parseFloat(document.getElementById('set-sieu-am-tran').value) || 3,
         phan_tram_thay: parseFloat(document.getElementById('set-phan-tram-thay').value) || 0,
-        lich_thay_nuoc_gio: document.getElementById('set-lich-gio').value || '',
-        lich_thay_nuoc_thu: document.getElementById('set-lich-thu').value || ''
+        lich_thay_nuoc_gio: document.getElementById('set-lich-gio').value || '08:00',
+        lich_thay_nuoc_thu: (document.getElementById('set-lich-chu-ky')?.value === 'daily') ? '2,3,4,5,6,7,8' : (document.getElementById('set-lich-thu').value || '2,3,4,5,6,7,8'),
+        
+        coi_enable: document.getElementById('set-coi-enable') ? document.getElementById('set-coi-enable').checked : true,
+        coi_on_sec: parseInt(document.getElementById('set-coi-on') ? document.getElementById('set-coi-on').value : 10) || 10,
+        coi_off_sec: parseInt(document.getElementById('set-coi-off') ? document.getElementById('set-coi-off').value : 30) || 30,
+        coi_snooze_min: parseInt(document.getElementById('set-coi-snooze') ? document.getElementById('set-coi-snooze').value : 5) || 5
     };
     
     // Ràng buộc lại Mực nước Max trước khi lưu
@@ -715,12 +875,21 @@ setInterval(async () => {
                 const alertBox = document.getElementById('system-alerts');
                 if (alertBox && cb.canh_bao) {
                     if (cb.canh_bao.length > 0) {
-                        alertBox.innerHTML = cb.canh_bao.map(msg => 
-                            `<div style="background: rgba(239, 68, 68, 0.15); border-left: 4px solid #ef4444; padding: 12px 20px; margin-bottom: 10px; border-radius: 6px; display: flex; align-items: center; color: #ef4444; font-size: 1.05rem;">
-                                <i class="fa-solid fa-triangle-exclamation" style="margin-right: 15px; font-size: 1.4rem;"></i>
-                                <span style="font-weight: 600;">${msg}</span>
+                        const isSnoozing = Boolean(cb.coi_dang_snooze);
+                        const remaining = cb.snooze_con_lai_giay || 0;
+                        const snoozeBtnHtml = isSnoozing 
+                            ? `<button class="btn-gradient" style="background: #64748b; padding: 6px 14px; font-size: 0.85rem; border-radius: 6px; border:none; cursor:default;" disabled><i class="fa-solid fa-bell-slash"></i> Đang tắt còi (${Math.ceil(remaining/60)}p)</button>`
+                            : `<button onclick="tatCoiTamThoi()" class="btn-gradient" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); width: auto; padding: 6px 14px; font-size: 0.85rem; border-radius: 6px; cursor: pointer; border:none;"><i class="fa-solid fa-bell-slash"></i> Tắt còi tạm thời</button>`;
+
+                        let html = cb.canh_bao.map(msg => 
+                            `<div style="background: rgba(239, 68, 68, 0.15); border-left: 4px solid #ef4444; padding: 12px 20px; margin-bottom: 8px; border-radius: 6px; display: flex; align-items: center; color: #ef4444; font-size: 1.02rem;">
+                                <i class="fa-solid fa-triangle-exclamation" style="margin-right: 15px; font-size: 1.3rem;"></i>
+                                <span style="font-weight: 600; flex: 1;">${msg}</span>
                             </div>`
                         ).join('');
+                        
+                        html += `<div style="text-align: right; margin-top: 4px; margin-bottom: 12px;">${snoozeBtnHtml}</div>`;
+                        alertBox.innerHTML = html;
                     } else {
                         alertBox.innerHTML = '';
                     }
@@ -839,6 +1008,43 @@ async function loadYeuCauCa() {
 // Tải bảng yêu cầu khi trang vừa load
 document.addEventListener('DOMContentLoaded', () => {
     loadYeuCauCa();
+    const btnCalibPH = document.getElementById('btn-calib-ph');
+    if (btnCalibPH) {
+        btnCalibPH.addEventListener('click', hieuChuanPH);
+    }
 });
+
+// Hàm Tạm tắt còi (Snooze)
+async function tatCoiTamThoi() {
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/tat_coi_tam_thoi`, { method: 'POST' });
+        const data = await res.json();
+        alert(data.message || 'Đã tạm ngưng còi!');
+    } catch (e) {
+        alert('Lỗi kết nối máy chủ khi tắt còi!');
+    }
+}
+
+// Hàm Hiệu chuẩn pH theo dung dịch mẫu
+async function hieuChuanPH() {
+    const phChuan = parseFloat(document.getElementById('calib-ph-val').value) || 7.0;
+    const msgEl = document.getElementById('calib-ph-msg');
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/hieu_chuan_ph`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ph_chuan: phChuan })
+        });
+        const data = await res.json();
+        if (msgEl) {
+            msgEl.innerText = data.message || 'Đã hiệu chuẩn thành công!';
+            msgEl.classList.remove('hidden');
+            setTimeout(() => msgEl.classList.add('hidden'), 5000);
+        }
+    } catch (e) {
+        alert('Lỗi khi gửi yêu cầu hiệu chuẩn pH!');
+    }
+}
+
 
 

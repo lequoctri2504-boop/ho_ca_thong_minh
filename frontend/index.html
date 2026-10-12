@@ -11,8 +11,27 @@
 </head>
 <body>
     <div class="dashboard-wrapper">
-        <aside class="sidebar glass-panel">
-            <div class="logo"><i class="fa-solid fa-water"></i> Aqua<span>AI</span></div>
+        <!-- THANH ĐIỀU HƯỚNG TRÊN CÙNG DÀNH CHO ĐIỆN THOẠI & TABLET -->
+        <header class="mobile-topbar glass-panel">
+            <div class="mobile-logo"><i class="fa-solid fa-water text-primary"></i> Aqua<span>AI</span></div>
+            <div style="display:flex; align-items:center; gap: 10px;">
+                <span class="mobile-badge"><i class="fa-solid fa-circle text-green" style="font-size: 8px;"></i> IoT Online</span>
+                <button id="mobile-menu-btn" class="mobile-menu-btn" aria-label="Mở Menu">
+                    <i class="fa-solid fa-bars"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- LỚP PHỦ MỜ KHI MỞ MENU TRÊN ĐIỆN THOẠI -->
+        <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
+
+        <aside id="main-sidebar" class="sidebar glass-panel">
+            <div class="sidebar-header-box">
+                <div class="logo"><i class="fa-solid fa-water"></i> Aqua<span>AI</span></div>
+                <button id="sidebar-close-btn" class="sidebar-close-btn" aria-label="Đóng Menu">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
             <nav>
                 <button class="nav-btn active" data-tab="tab-overview"><i class="fa-solid fa-chart-line"></i> Tổng quan IoT</button>
                 <button class="nav-btn" data-tab="tab-ai"><i class="fa-solid fa-fish"></i> Tư vấn cá phù hợp</button>
@@ -360,90 +379,290 @@
                             </div>
                         </div>
 
-                        <!-- KHUNG 2: CẤU HÌNH CẢM BIẾN & MÔI TRƯỜNG -->
+                        <!-- KHUNG 2: CẤU HÌNH MÔI TRƯỜNG & TOẠ ĐỘ HỒ -->
                         <div class="control-card glass-panel" style="text-align: left;">
-                            <div class="control-header" style="text-align: center; margin-bottom: 10px;">
+                            <div class="control-header" style="text-align: center; margin-bottom: 12px;">
                                 <i class="fa-solid fa-sliders icon-large text-orange"></i>
-                                <h3>Cấu Hình Môi Trường & Cảm Biến</h3>
+                                <h3>Cấu Hình Môi Trường & Bể</h3>
                             </div>
                             
                             <div class="mt-3">
-                                <label>Ngưỡng Nhiệt độ an toàn (°C)</label><br>
-                                <div style="display:flex; gap:10px;">
-                                    <input type="number" id="set-temp-min" class="glass-input" style="width:100%" step="0.1">
-                                    <input type="number" id="set-temp-max" class="glass-input" style="width:100%" step="0.1">
+                                <label style="display:block; margin-bottom: 6px; font-weight: 500;">
+                                    Ngưỡng Nhiệt độ an toàn (°C)
+                                    <span class="tooltip-wrap">
+                                        <span class="tooltip-icon">?</span>
+                                        <span class="tooltip-box">Nếu nhiệt độ nước vượt quá khoảng Min - Max này, hệ thống sẽ kích hoạt báo động khẩn cấp và hú còi.</span>
+                                    </span>
+                                </label>
+                                <div style="display:flex; gap:10px; width: 100%;">
+                                    <input type="number" id="set-temp-min" class="glass-input" style="width: 50%;" step="0.1" placeholder="Min (24)">
+                                    <input type="number" id="set-temp-max" class="glass-input" style="width: 50%;" step="0.1" placeholder="Max (28)">
                                 </div>
                             </div>
+
                             <div class="mt-3">
-                                <label>Ngưỡng Độ pH an toàn</label><br>
-                                <div style="display:flex; gap:10px;">
-                                    <input type="number" id="set-ph-min" class="glass-input" style="width:100%" step="0.1">
-                                    <input type="number" id="set-ph-max" class="glass-input" style="width:100%" step="0.1">
+                                <label style="display:block; margin-bottom: 6px; font-weight: 500;">
+                                    Ngưỡng Độ pH an toàn
+                                    <span class="tooltip-wrap">
+                                        <span class="tooltip-icon">?</span>
+                                        <span class="tooltip-box">Dải pH thích hợp cho cá sống khỏe. Thấp hơn là nước bị chua (axit), cao hơn là nước bị kiềm mạnh.</span>
+                                    </span>
+                                </label>
+                                <div style="display:flex; gap:10px; width: 100%;">
+                                    <input type="number" id="set-ph-min" class="glass-input" style="width: 50%;" step="0.1" placeholder="Min (6.5)">
+                                    <input type="number" id="set-ph-max" class="glass-input" style="width: 50%;" step="0.1" placeholder="Max (7.5)">
                                 </div>
                             </div>
+
                             <div class="mt-3">
-                                <label>Cảnh báo Cạn Nước (%)</label><br>
-                                <input type="number" id="set-water-min" class="glass-input" style="width:100%">
+                                <label style="display:block; margin-bottom: 6px; font-weight: 500;">
+                                    Cảnh báo Cạn Nước (%)
+                                    <span class="tooltip-wrap">
+                                        <span class="tooltip-icon">?</span>
+                                        <span class="tooltip-box">Khi nước bốc hơi hoặc rò rỉ tụt dưới mức % này, còi sẽ hú báo động để bạn kịp châm nước, chống cháy máy lọc/sưởi.</span>
+                                    </span>
+                                </label>
+                                <input type="number" id="set-water-min" class="glass-input" style="width:100%" placeholder="Ví dụ: 30" min="5" max="90">
                             </div>
 
                             <hr style="border-color: rgba(255,255,255,0.1); margin: 15px 0;">
                             
-                            <h4 class="text-primary" style="font-size: 0.9rem;">Toạ độ Cảm biến Siêu âm</h4>
-                            <div style="display:flex; gap:10px; margin-top: 5px;">
-                                <div style="flex:1;">
-                                    <label>Chiều cao lắp Cảm biến (cm)</label><br>
-                                    <input type="number" id="set-sieu-am-day" class="glass-input" style="width:100%" step="0.1" value="45">
-                                    <p style="font-size: 0.75rem; color: #94a3b8; margin-top:3px;">*Từ mắt cảm biến xuống sát ĐÁY</p>
+                            <h4 class="text-primary" style="font-size: 0.95rem; margin-bottom: 8px;"><i class="fa-solid fa-ruler-vertical"></i> Toạ độ Cảm biến Siêu âm</h4>
+                            <div style="display:flex; gap:10px; width: 100%;">
+                                <div style="width: 50%;">
+                                    <label style="font-size: 0.82rem;">
+                                        Cao độ Cảm biến (cm):
+                                        <span class="tooltip-wrap">
+                                            <span class="tooltip-icon">?</span>
+                                            <span class="tooltip-box">Đo bằng thước từ mép ngoài mắt loa siêu âm thẳng xuống ĐÁY trong của hồ. Dùng làm mốc gốc đo.</span>
+                                        </span>
+                                    </label>
+                                    <input type="number" id="set-sieu-am-day" class="glass-input" style="width:100%" step="0.1" value="26.5">
+                                    <p style="font-size: 0.72rem; color: #94a3b8; margin-top:3px;">*Từ mắt loa đến ĐÁY hồ</p>
                                 </div>
-                                <div style="flex:1;">
-                                    <label>Mực nước Max mong muốn (cm)</label><br>
-                                    <input type="number" id="set-sieu-am-tran" class="glass-input" style="width:100%" step="0.1" value="38">
-                                    <small class="text-gray" style="font-size:0.75rem; display:block; margin-top:3px;">Không vượt quá: Chiều cao hồ - 2cm</small>
-                                    <p style="font-size: 0.75rem; color: #f59e0b; margin-top:3px;">*Tối đa = Chiều cao hồ - 2cm</p>
+                                <div style="width: 50%;">
+                                    <label style="font-size: 0.82rem;">
+                                        Mực nước Max (cm):
+                                        <span class="tooltip-wrap">
+                                            <span class="tooltip-icon">?</span>
+                                            <span class="tooltip-box">Chiều cao mực nước tối đa bạn muốn có trong hồ (tương ứng 100% đầy). Khuyến nghị cách miệng hồ ít nhất 2cm.</span>
+                                        </span>
+                                    </label>
+                                    <input type="number" id="set-sieu-am-tran" class="glass-input" style="width:100%" step="0.1" value="16.0">
+                                    <p style="font-size: 0.72rem; color: #f59e0b; margin-top:3px;">*Mực nước mong muốn</p>
                                 </div>
                             </div>
                             
                             <div class="mt-3">
-                                <label>Tần suất gửi dữ liệu (giây)</label><br>
-                                <input type="number" id="set-chu-ky" class="glass-input" style="width:100%" value="60">
+                                <label style="font-size: 0.85rem;">
+                                    Tần suất gửi dữ liệu (giây):
+                                    <span class="tooltip-wrap">
+                                        <span class="tooltip-icon">?</span>
+                                        <span class="tooltip-box">Khoảng thời gian ESP32 gửi thông số về Web (mặc định 60s). Khi đang bơm thay nước, hệ thống tự tăng tốc lên 1s/lần.</span>
+                                    </span>
+                                </label>
+                                <input type="number" id="set-chu-ky" class="glass-input" style="width:100%" value="60" min="5" max="3600">
                             </div>
                         </div>
 
                         <!-- KHUNG 3: HỆ THỐNG THAY NƯỚC -->
                         <div class="control-card glass-panel" style="text-align: left;">
-                            <div class="control-header" style="text-align: center; margin-bottom: 10px;">
+                            <div class="control-header" style="text-align: center; margin-bottom: 12px;">
                                 <i class="fa-solid fa-droplet icon-large text-blue"></i>
                                 <h3>Hệ Thống Thay Nước</h3>
                             </div>
                             
-                            <h4 class="mt-3 text-yellow" style="font-size: 0.95rem;">1. Thay Nước Tự Động (Lịch)</h4>
-                            <div class="mt-2">
-                                <label>Lượng nước thay (%)</label><br>
-                                <input type="number" id="set-phan-tram-thay" class="glass-input" style="width:100%" placeholder="Ví dụ: 30" step="1">
-                            </div>
-                            <div style="display:flex; gap:10px; margin-top: 10px;">
-                                <div style="flex:1;">
-                                    <label>Giờ kích hoạt</label><br>
-                                    <input type="time" id="set-lich-gio" class="glass-input" style="width:100%">
+                            <!-- 1. Hẹn giờ tự động -->
+                            <div style="background: rgba(0,0,0,0.25); padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.05);">
+                                <h4 class="text-yellow" style="font-size: 0.95rem; margin-bottom: 8px;"><i class="fa-regular fa-clock"></i> 1. Thay Nước Tự Động (Lịch)</h4>
+                                <div>
+                                    <label style="font-size: 0.85rem;">
+                                        Lượng nước thay (%):
+                                        <span class="tooltip-wrap">
+                                            <span class="tooltip-icon">?</span>
+                                            <span class="tooltip-box">Tỷ lệ % nước hồ cần xả ra và bơm bù vào tự động theo lịch (khuyên dùng từ 20% đến 40% để cá không sốc nước).</span>
+                                        </span>
+                                    </label>
+                                    <input type="number" id="set-phan-tram-thay" class="glass-input" style="width:100%" placeholder="Ví dụ: 30" step="1" min="0" max="100">
                                 </div>
-                                <div style="flex:1;">
-                                    <label>Ngày (Thứ)</label><br>
-                                    <input type="text" id="set-lich-thu" class="glass-input" style="width:100%" placeholder="2,4,6 hoặc 8">
+                                <div style="display:flex; gap:10px; margin-top: 8px; width: 100%;">
+                                    <div style="width: 50%;">
+                                        <label style="font-size: 0.82rem; font-weight: 500;">
+                                            Giờ kích hoạt (24h):
+                                            <span class="tooltip-wrap">
+                                                <span class="tooltip-icon">?</span>
+                                                <span class="tooltip-box">Chuẩn 24 giờ (từ 00:00 đến 23:59). Không bị nhầm lẫn giữa ngày và đêm (AM/PM).</span>
+                                            </span>
+                                        </label>
+                                        <div style="display:flex; gap:4px; align-items:center;">
+                                            <select id="set-lich-gio-h" class="glass-input" style="flex:1; padding: 6px 4px; font-weight: bold; color: #38bdf8; text-align: center;">
+                                                <option value="00">00h</option><option value="01">01h</option><option value="02">02h</option><option value="03">03h</option>
+                                                <option value="04">04h</option><option value="05">05h</option><option value="06">06h</option><option value="07">07h</option>
+                                                <option value="08" selected>08h</option><option value="09">09h</option><option value="10">10h</option><option value="11">11h</option>
+                                                <option value="12">12h</option><option value="13">13h</option><option value="14">14h</option><option value="15">15h</option>
+                                                <option value="16">16h</option><option value="17">17h</option><option value="18">18h</option><option value="19">19h</option>
+                                                <option value="20">20h</option><option value="21">21h</option><option value="22">22h</option><option value="23">23h</option>
+                                            </select>
+                                            <span style="font-weight: bold; color: #94a3b8;">:</span>
+                                            <select id="set-lich-gio-m" class="glass-input" style="flex:1; padding: 6px 4px; font-weight: bold; color: #38bdf8; text-align: center;">
+                                                <option value="00" selected>00p</option><option value="05">05p</option><option value="10">10p</option><option value="15">15p</option>
+                                                <option value="20">20p</option><option value="25">25p</option><option value="30">30p</option><option value="35">35p</option>
+                                                <option value="40">40p</option><option value="45">45p</option><option value="50">50p</option><option value="55">55p</option>
+                                            </select>
+                                        </div>
+                                        <input type="hidden" id="set-lich-gio" value="08:00">
+                                    </div>
+                                    <div style="width: 50%;">
+                                        <label style="font-size: 0.82rem; font-weight: 500;">
+                                            Chu kỳ lặp lại:
+                                            <span class="tooltip-wrap">
+                                                <span class="tooltip-icon">?</span>
+                                                <span class="tooltip-box">Chọn "Mỗi 24 giờ" để hệ thống tự động thay nước hằng ngày vào giờ đã chọn, hoặc chọn tùy chỉnh từng Thứ.</span>
+                                            </span>
+                                        </label>
+                                        <select id="set-lich-chu-ky" class="glass-input" style="width:100%; padding: 6px 6px; font-size: 0.82rem; color: #fbbf24;">
+                                            <option value="daily">Mỗi 24 giờ (Hằng ngày)</option>
+                                            <option value="custom">Tùy chọn theo Thứ</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div id="lich-thu-wrap" class="hidden mt-2">
+                                    <label style="font-size: 0.78rem;">Các ngày kích hoạt trong tuần (Thứ):</label>
+                                    <input type="text" id="set-lich-thu" class="glass-input" style="width:100%" placeholder="VD: 2,4,6 hoặc 8">
+                                    <p style="font-size: 0.72rem; color: #94a3b8; margin-top: 3px;">*2: Thứ 2 | 8: Chủ nhật. Ngăn cách bằng dấu phẩy.</p>
                                 </div>
                             </div>
-                            <p style="font-size: 0.8rem; color: #94a3b8; margin-top: 5px;">*2: Thứ 2 | 8: Chủ nhật. Nhập các ngày cách nhau bằng dấu phẩy.</p>
                             
-                            <hr style="border-color: rgba(255,255,255,0.1); margin: 20px 0;">
-                            
-                            <h4 class="text-green" style="font-size: 0.95rem;">2. Thay Nước Ngay (Thủ Công)</h4>
-                            <div style="display:flex; gap:10px; align-items: flex-end; margin-top: 10px;">
-                                <div style="flex:1;">
-                                    <label>Lượng nước cần rút (%)</label><br>
-                                    <input type="number" id="quick-water-percent" class="glass-input" style="width:100%" placeholder="Ví dụ: 20" step="1" value="20">
+                            <!-- 2. Thay nước ngay thủ công -->
+                            <div style="background: rgba(0,0,0,0.25); padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+                                <h4 class="text-green" style="font-size: 0.95rem; margin-bottom: 8px;"><i class="fa-solid fa-play"></i> 2. Thay Nước Ngay (Thủ Công)</h4>
+                                <div style="display:flex; gap:10px; align-items: flex-end; width: 100%;">
+                                    <div style="flex: 1.2; min-width: 0;">
+                                        <label style="font-size: 0.85rem; font-weight: 500;">
+                                            Lượng nước cần rút (%):
+                                            <span class="tooltip-wrap">
+                                                <span class="tooltip-icon">?</span>
+                                                <span class="tooltip-box">Hút ra lượng nước tương ứng. ESP32 tự động ngắt bơm xả chính xác tại biên ngay khi đạt đủ lượng rút mà không bị trễ.</span>
+                                            </span>
+                                        </label>
+                                        <input type="number" id="quick-water-percent" class="glass-input" style="width:100%; font-weight: bold; font-size: 1.15rem; color: #00f2fe;" placeholder="20" step="1" value="20" min="5" max="100">
+                                    </div>
+                                    <button type="button" id="btn-quick-water" class="btn-gradient" style="flex: 1; min-width: 0; padding: 12px 8px; font-size: 0.88rem; font-weight: bold; border-radius: 8px; white-space: nowrap;">
+                                        <i class="fa-solid fa-water"></i> BẮT ĐẦU
+                                    </button>
                                 </div>
-                                <button type="button" id="btn-quick-water" class="btn-gradient" style="padding: 10px 15px; font-size: 0.9rem;">BẮT ĐẦU THAY</button>
+
+                                <!-- LỰA CHỌN TỰ BƠM CẤP LẠI (MẶC ĐỊNH BỎ TÍCH: CHỈ RÚT NƯỚC RỒI DỪNG) -->
+                                <div class="mt-2" style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); padding: 8px 10px; border-radius: 6px;">
+                                    <label style="display: flex; align-items: center; gap: 8px; font-size: 0.82rem; cursor: pointer; color: #38bdf8; margin: 0;">
+                                        <input type="checkbox" id="quick-water-auto-refill" style="width: 16px; height: 16px; accent-color: #38bdf8; cursor: pointer; flex-shrink: 0;">
+                                        <span style="font-weight: 500;">Tự động bơm cấp đầy lại sau khi xả</span>
+                                        <span class="tooltip-wrap">
+                                            <span class="tooltip-icon">?</span>
+                                            <span class="tooltip-box">Nếu tích chọn: Bơm xả hút xong sẽ tự kích hoạt Bơm Cấp bù nước mới cho đầy hồ. Nếu KHÔNG tích (mặc định): Hệ thống chỉ xả đúng % bạn chọn rồi dừng hẳn.</span>
+                                        </span>
+                                    </label>
+                                    <p style="font-size: 0.72rem; color: #94a3b8; margin: 4px 0 0 24px;">*Mặc định: Chỉ rút nước rồi dừng, không tự bơm bù.</p>
+                                </div>
+
+                                <!-- LỰA CHỌN THAY TOÀN BỘ (DỌN HỒ) -->
+                                <div class="mt-2" style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); padding: 8px 10px; border-radius: 6px;">
+                                    <label style="display: flex; align-items: center; gap: 8px; font-size: 0.82rem; cursor: pointer; color: #f59e0b; margin: 0;">
+                                        <input type="checkbox" id="quick-water-drain-only" style="width: 16px; height: 16px; accent-color: #f59e0b; cursor: pointer; flex-shrink: 0;">
+                                        <span style="font-weight: 500;">Chỉ xả cạn để dọn hồ (Rút tới đáy 2.5cm)</span>
+                                        <span class="tooltip-wrap">
+                                            <span class="tooltip-icon">?</span>
+                                            <span class="tooltip-box">Bơm xả sẽ hút cạn nước cách đáy 2.5cm rồi dừng hẳn, không tự cấp nước mới vào để bạn kịp lau chùi vệ sinh hồ.</span>
+                                        </span>
+                                    </label>
+                                    <p style="font-size: 0.72rem; color: #94a3b8; margin: 4px 0 0 24px;">*Tự tắt còi báo cạn, dừng an toàn cách đáy 2.5cm.</p>
+                                </div>
+
+                                <p id="quick-water-status" class="mt-2 text-orange hidden" style="font-size: 0.85rem; font-weight: bold;"><i class="fa-solid fa-spinner fa-spin"></i> Đang chạy chu trình thay nước...</p>
                             </div>
-                            <p id="quick-water-status" class="mt-3 text-orange hidden" style="font-size: 0.85rem; font-weight: bold;"><i class="fa-solid fa-spinner fa-spin"></i> Đang chạy chu trình thay nước...</p>
+                        </div>
+
+                        <!-- KHUNG 4: CÒI BÁO ĐỘNG & HIỆU CHUẨN PH TÁCH RIÊNG ĐỘC LẬP -->
+                        <div class="control-card glass-panel" style="text-align: left;">
+                            <div class="control-header" style="text-align: center; margin-bottom: 12px;">
+                                <i class="fa-solid fa-microchip-awesome icon-large text-yellow"></i>
+                                <h3>Còi Báo & Hiệu Chuẩn pH</h3>
+                            </div>
+
+                            <!-- 1. CẤU HÌNH CÒI CHU KỲ -->
+                            <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 8px; padding: 12px; margin-bottom: 15px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                    <h4 class="text-red" style="font-size: 0.95rem; margin: 0;">
+                                        <i class="fa-solid fa-bullhorn"></i> Còi Cảnh Báo Chu Kỳ
+                                        <span class="tooltip-wrap">
+                                            <span class="tooltip-icon">?</span>
+                                            <span class="tooltip-box">Còi hú ngắt quãng theo nhịp Hú / Nghỉ thay vì kêu 100% thời gian, giúp bạn nhận biết sự cố mà không bị nhức đầu.</span>
+                                        </span>
+                                    </h4>
+                                    <label class="toggle-switch" style="transform: scale(0.85);"><input type="checkbox" id="set-coi-enable" checked><span class="slider"></span></label>
+                                </div>
+                                <p style="font-size: 0.75rem; color: #94a3b8; margin-bottom: 8px;">Hú ngắt quãng chống chói tai khi có cảnh báo môi trường.</p>
+                                <div style="display: flex; gap: 8px; margin-bottom: 8px; width: 100%;">
+                                    <div style="width: 50%;">
+                                        <label style="font-size: 0.78rem;">
+                                            Hú trong (giây):
+                                            <span class="tooltip-wrap">
+                                                <span class="tooltip-icon">?</span>
+                                                <span class="tooltip-box">Thời gian còi kêu liên tục mỗi chu kỳ (khuyên dùng 5 - 15 giây).</span>
+                                            </span>
+                                        </label>
+                                        <input type="number" id="set-coi-on" class="glass-input" style="width:100%" value="10" min="1" max="60">
+                                    </div>
+                                    <div style="width: 50%;">
+                                        <label style="font-size: 0.78rem;">
+                                            Nghỉ trong (giây):
+                                            <span class="tooltip-wrap">
+                                                <span class="tooltip-icon">?</span>
+                                                <span class="tooltip-box">Thời gian còi tạm im lặng trước khi kêu tiếp chu kỳ sau (khuyên dùng 20 - 60 giây).</span>
+                                            </span>
+                                        </label>
+                                        <input type="number" id="set-coi-off" class="glass-input" style="width:100%" value="30" min="5" max="300">
+                                    </div>
+                                </div>
+                                <div>
+                                    <label style="font-size: 0.78rem;">
+                                        Tạm hoãn khi bấm nút (Snooze - phút):
+                                        <span class="tooltip-wrap">
+                                            <span class="tooltip-icon">?</span>
+                                            <span class="tooltip-box">Khi đang có sự cố, nếu bạn bấm nút Snooze trên Web hoặc giữ Nút 5 trên mạch 1.5s, còi sẽ im lặng trong số phút này để bạn khắc phục sự cố.</span>
+                                        </span>
+                                    </label>
+                                    <input type="number" id="set-coi-snooze" class="glass-input" style="width:100%" value="5" min="1" max="60">
+                                </div>
+                            </div>
+
+                            <!-- 2. HIỆU CHUẨN CẢM BIẾN PH (DIYMORE PH-4502C) -->
+                            <div style="background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 8px; padding: 12px;">
+                                <h4 class="text-blue" style="font-size: 0.95rem; margin-bottom: 6px;">
+                                    <i class="fa-solid fa-flask-vial"></i> Hiệu Chuẩn pH (PH-4502C)
+                                    <span class="tooltip-wrap">
+                                        <span class="tooltip-icon">?</span>
+                                        <span class="tooltip-box">Đầu dò pH công nghiệp cần được cân chỉnh điểm mốc để triệt tiêu sai số điện áp trên module PH-4502C.</span>
+                                    </span>
+                                </h4>
+                                <p style="font-size: 0.75rem; color: #94a3b8; margin-bottom: 8px;">Nhúng đầu dò vào nước lọc/dung dịch chuẩn rồi bấm Cân Chỉnh.</p>
+                                <div style="display: flex; gap: 8px; align-items: flex-end; width: 100%;">
+                                    <div style="flex: 1.1; min-width: 0;">
+                                        <label style="font-size: 0.8rem; font-weight: 500;">
+                                            pH mẫu chuẩn:
+                                            <span class="tooltip-wrap">
+                                                <span class="tooltip-icon">?</span>
+                                                <span class="tooltip-box">Độ pH của dung dịch mẫu bạn đang nhúng đầu dò vào (thường là nước lọc/nước cất pH 7.0 hoặc gói bột đệm pH 4.0 / 6.86).</span>
+                                            </span>
+                                        </label>
+                                        <input type="number" id="calib-ph-val" class="glass-input" style="width:100%; font-weight: bold; font-size: 1.1rem; color: #38bdf8;" value="7.0" step="0.1">
+                                    </div>
+                                    <button type="button" id="btn-calib-ph" class="btn-gradient" style="flex: 1.2; min-width: 0; padding: 11px 8px; font-size: 0.82rem; white-space: nowrap; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); border-radius: 8px;">
+                                        <i class="fa-solid fa-crosshairs"></i> Cân Chỉnh
+                                    </button>
+                                </div>
+                                <p id="calib-ph-msg" class="text-green hidden mt-2" style="font-size: 0.78rem; font-weight: bold;"></p>
+                            </div>
                         </div>
 
                     </div>

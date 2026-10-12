@@ -50,7 +50,7 @@ Bạn liên kết tài khoản Google Assistant với IFTTT. Cấu hình trên w
 Cả 2 cách trên đều rất khả thi và là tính năng "ăn điểm" tuyệt đối nếu hội đồng chấm luận văn nhìn thấy. Nếu lúc nào bạn rảnh rỗi muốn làm thử, tôi sẽ hướng dẫn bạn viết code cho Hướng 1 nhé, rất thú vị đấy!
 ------------
 
-
+http://<IP_MÁY_TÍNH>:8000/frontend/ 
 
 
 ------------ TÍCH HỢP AI CHATBOT TƯ VẤN (RAG + OLLAMA) ------------
@@ -63,3 +63,101 @@ Lý do chọn model "qwen2.5:3b" cho đồ án Hồ cá:
 2. So sánh với các mô hình cùng phân khúc (như Google Gemma 2:2B hay Meta Llama 3:8B):
 - ƯU ĐIỂM BÁ ĐẠO: Tiếng Việt tự nhiên nhất hiện nay. Các model khác thường mắc lỗi chêm từ tiếng Anh hoặc hành văn kiểu "Google Dịch". Đặc biệt, khả năng Đọc hiểu thông số (RAG) của Qwen2.5 cực kỳ bén, đưa số liệu Nhiệt độ/pH nào là nó bám sát số đó để tư vấn, hiếm khi bị "ảo giác" (chém gió sai lệch).
 - NHƯỢC ĐIỂM: Do kích thước nhỏ (3 tỷ tham số), nếu hỏi nó các kiến thức xã hội vĩ mô, nó sẽ kém thông minh hơn các model to. Tuy nhiên, đối với luận văn hồ cá (chỉ tập trung tư vấn sinh thái dựa trên dữ liệu RAG mớm vào), thì nhược điểm này hoàn toàn không ảnh hưởng.
+
+------------------------------------------------------------
+DANH SÁCH CÁC TÍNH NĂNG VÀ BẢO VỆ ĐÃ ĐƯỢC NÂNG CẤP HOÀN THÀNH
+------------------------------------------------------------
+
+1. CHỨC NĂNG CẬP NHẬT FIRMWARE KHÔNG DÂY (ELEGANT OTA):
+- Tích hợp máy chủ Web nội bộ và thư viện ElegantOTA tại cổng 80 của ESP32.
+- Đường dẫn truy cập: http://<IP_ESP32>/update (Địa chỉ IP hiển thị trực quan ngay trên dòng 1 của OLED).
+- Tiện ích: Cho phép xuất file .bin từ Arduino IDE và nạp Firmware từ xa qua trình duyệt Web, hoàn toàn không cần cắm cáp nạp vào máy tính.
+
+2. CƠ CHẾ CHỐNG TREO CHIP WATCHDOG TIMER (WDT 20 GIÂY):
+- Sử dụng thư viện <esp_task_wdt.h> tương thích chuẩn ESP-IDF.
+- Thiết lập thời gian canh gác là 20 giây, hàm esp_task_wdt_reset() được gọi liên tục mỗi vòng loop().
+- Nếu chip bị kẹt do lỗi tràn RAM hoặc đơ mạng, WDT sẽ tự động khởi động lại (Reboot) vi điều khiển về trạng thái vận hành an toàn.
+
+3. KẾT NỐI WIFI TIỆN LỢI BẰNG WIFIMANAGER (CAPTIVE PORTAL):
+- Tích hợp thư viện WiFiManager: Khi mang thiết bị đến môi trường mới (trường học, triển lãm, đổi WiFi gia đình), ESP32 tự động phát AP mang tên "HO_CA_THONG_MINH_CONFIG" (IP: 192.168.4.1).
+- Người dùng chỉ cần dùng điện thoại kết nối vào WiFi này để chọn mạng và nhập mật khẩu trực tiếp qua giao diện Web Captive Portal.
+- Hỗ trợ Nút Reset WiFi Cứng: Giữ Nút 1 (Bơm) trong 3 giây lúc bật nguồn để xóa cấu hình WiFi cũ bất cứ lúc nào.
+
+4. CÒI BÁO ĐỘNG CHU KỲ (BLINK ALARM) & NÚT SNOOZE TẮT CÒI:
+- Tránh chói tai và phiền toái: Còi hú ngắt quãng theo nhịp (Mặc định: Hú 10 giây -> Nghỉ 30 giây -> Lặp lại nếu vẫn còn cảnh báo môi trường).
+- Người dùng có thể tùy chỉnh thời gian Hú, Nghỉ, và Tạm hoãn (Snooze) ngay trên giao diện Web.
+- Nút Tắt Còi Cứng (Snooze tại hộp ESP32): Nhấn giữ Nút 5 trong 1.5 giây khi còi kêu để ngắt còi tạm thời trong 5 phút.
+- Nút Tắt Còi Từ Xa trên Web: Nút "Tắt còi tạm thời" hiển thị màu cam nổi bật ngay cạnh thông báo lỗi trên Dashboard.
+
+5. HIỆU CHUẨN CẢM BIẾN PH (DIYMORE PH-4502C):
+- Áp dụng công thức truyền tuyến tính chuẩn của hãng Diymore (V_neutral = 2.5V, Slope = -3.5 ~ -5.7).
+- Bổ sung ô nhập pH mẫu chuẩn và nút "Cân Chỉnh pH 7.0" trên Web. Hệ thống tự động tính toán và lưu độ lệch bù trừ (ph_offset) vào Database và đồng bộ xuống ESP32.
+
+6. CẢI TIẾN HIỂN THỊ MÀN HÌNH OLED 0.96 INCH:
+- Dòng 1: Hiển thị trạng thái kết nối mạng thực tế "WIFI:OK  SERVER:OK" và biểu tượng chuông "[!]" hoặc "[Zz]".
+- Dòng 2: Nhiệt độ nước (DS18B20).
+- Dòng 3: Độ pH (Đã áp dụng bù trừ hiệu chuẩn).
+- Dòng 4: Mực nước phần trăm kèm chiều cao cột nước thực tế: "M.Nuoc: 85% (13.6cm)".
+
+7. NÂNG CẤP CHU TRÌNH THAY NƯỚC TỰ ĐỘNG & BẢO VỆ BƠM TẠI BIÊN (EDGE FAIL-SAFE):
+- Tự động tăng tốc độ đo: Ngay khi kích hoạt thay nước (xả hoặc cấp), ESP32 tự động tăng tần suất gửi dữ liệu lên 1 giây/lần (thay vì 60s) để Backend theo dõi mực nước mượt mà và ngắt đúng thời điểm.
+- Ngắt bơm tức thì khi mất mạng (Link-Loss Fail-Safe): Nếu ESP32 mất kết nối WiFi hoặc MQTT trong lúc bơm, mạch tự động ngắt ngay lập tức cả Bơm Xả và Bơm Cấp để chống cạn/tràn ngoài ý muốn.
+- Chống cháy Bơm Xả: Nếu nước rút sát đáy (chiều cao cột nước <= 2.5cm), Bơm Xả tự động ngắt cưỡng bức tại chỗ.
+- Chống tràn Bơm Cấp: Nếu nước dâng sát mép trên (cách cảm biến <= 2.5cm), Bơm Cấp tự động ngắt cưỡng bức tại chỗ.
+- Hỗ trợ chế độ "Thay nước toàn bộ / Xả dọn hồ": Bổ sung tùy chọn xả cạn tới 2.5cm đáy và không tự bơm cấp lại để người dùng cọ rửa vệ sinh hồ, đồng thời tự động tạm tắt còi báo cạn trong 30 phút.
+
+8. KHẮC PHỤC TRIỆT ĐỂ LỖI ĐỘ TRỄ XẢ NƯỚC (RÚT 20% THÀNH 50%) & TÙY CHỌN TỰ BƠM CẤP LẠI:
+- Nguyên nhân tìm thấy từ Database (21:15 - 21:17): ESP32 gửi dữ liệu với chu kỳ 60s nên máy bơm chạy liên tục 60s làm hút quá đà từ 100% xuống 48.5%. Sau đó server kích hoạt chu trình khép kín tự động bơm cấp lại.
+- Đưa cơ chế ngắt Bơm Xả / Bơm Cấp trực tiếp xuống phần cứng ESP32 (Zero-Latency Edge Auto-Stop):
+  + Server gửi lệnh kèm mục tiêu % chính xác: BOMXA_TARGET_<muc_tieu> và BOMCAP_TARGET_<muc_tieu>.
+  + Khi rơ-le bơm đang bật, ESP32 tăng tốc đọc siêu âm lên 250ms/lần (4 lần/giây) và so sánh liên tục.
+  + Vừa chạm ngưỡng mục tiêu (có trừ hao 0.5% quán tính dòng chảy), ESP32 TỰ ĐỘNG NGẮT RƠ-LE TẠI CHỖ, độ trễ bằng 0, không phụ thuộc vào độ trễ mạng hay độ trễ của Server.
+- Tách bạch rõ ràng 2 tùy chọn xả nước trên giao diện Web & Backend:
+  + Chế độ Mặc Định (Chỉ rút nước): Bơm xả đúng % bạn chọn rồi dừng hẳn, KHÔNG tự ý bơm bù nước vào hồ.
+  + Chế độ Chu trình Khép Kín: Tích vào ô "Tự động bơm cấp đầy lại sau khi xả" thì hệ thống mới kích hoạt bơm cấp sau khi xả xong.
+  + Chế độ Dọn Hồ: Tích chọn "Chỉ xả cạn để dọn hồ (Rút tới đáy 2.5cm)", tự động ngắt còi và vô hiệu hóa bơm cấp.
+
+9. CẢI TIẾN GIAO DIỆN HẸN GIỜ THAY NƯỚC CHUẨN 24 GIỜ & CHU KỲ MỖI 24 GIỜ:
+- Thay thế ô nhập giờ trình duyệt (bị dính AM/PM khó dùng) bằng 2 ô chọn Dropdown chuẩn 24 Giờ:
+  + Giờ: từ 00h đến 23h (00, 01, ..., 14h, ..., 23h).
+  + Phút: từ 00p đến 55p theo bước nhảy 5 phút.
+  + Trực quan 100%, không bị nhầm lẫn giữa ngày và đêm.
+- Bổ sung tùy chọn Chu kỳ lặp lại thông minh:
+  + "Mỗi 24 giờ (Hằng ngày)": Tự động kích hoạt thay nước mỗi ngày vào đúng khung giờ 24h đã chọn mà không cần gõ Thứ.
+  + "Tùy chọn theo Thứ": Cho phép chọn các ngày cố định trong tuần (VD: Thứ 2, 4, 6 hoặc Chủ nhật).
+- Đồng bộ hóa lệnh BOMXA_TARGET và tăng tốc đo 1s/lần khi Scheduler tự động kích hoạt thay nước định kỳ.
+
+10. TỐI ƯU HÓA RESPONSIVE TOÀN DIỆN CHO CÁC DÒNG ĐIỆN THOẠI HIỆN NAY (SMARTPHONE APP-LIKE):
+- Thanh Header Cố Định (Mobile Topbar): Tích hợp logo AquaAI, huy hiệu trạng thái "IoT Online" và nút menu Hamburger mở ngăn kéo điều hướng.
+- Menu Trượt Bên Trái (Off-canvas Drawer & Backdrop): Sidebar tự động ẩn và trượt mượt mà ra khi bấm menu, có lớp nền mờ (blur backdrop) và tự động đóng lại khi chọn tab.
+- Tự thích ứng kích thước màn hình (Breakpoints 1024px, 992px, 640px, 380px):
+  + Thẻ cảm biến và Khung điều khiển tự co giãn 1 cột trên màn hình hẹp, không bị tràn viền hay mất chữ.
+  + Biểu đồ Canvas và bộ lọc tự dàn dòng phù hợp kích thước máy nhỏ.
+- Tự động nhận diện IP máy chủ (Dynamic Mobile API): Cho phép điện thoại truy cập qua WiFi nội bộ (VD: 192.168.x.x) tự động kết nối Backend Python tại cổng 8000 mà không bị lỗi localhost.
+- Hỗ trợ chạm màn hình cảm ứng xem Tooltip: Chạm vào dấu (?) để bật/tắt bóng thông tin giải thích thuật ngữ một cách tự nhiên trên điện thoại.
+- Chatbot AI thích ứng màn hình điện thoại: Hộp chat tự điều chỉnh kích thước vừa vặn theo chiều dọc và chiều ngang màn hình di động.
+
+11. HOÀN THIỆN TOÀN DIỆN TRANG QUẢN TRỊ ADMIN (AQUAADMIN) & NẠP FIRMWARE OTA TỪ XA:
+- Quản lý ESP32 & Nạp OTA Không Dây (Tab 2):
+  + Tự động nhận diện IP của ESP32 qua bản tin MQTT từ xa (không cần nhập thủ công).
+  + Khởi động lại ESP32 từ xa: Gửi lệnh MQTT "ESP_RESTART" giúp reset chip từ giao diện Web mà không cần bấm nút cứng trên mạch.
+  + Module nạp Firmware OTA trực tiếp: Cho phép Admin kéo thả file ".bin" (biên dịch từ Arduino IDE) ngay trên trình duyệt, có thanh tiến trình % (Progress Bar) và khung nhật ký (Log Console) hiển thị trạng thái truyền tải.
+  + Đường dẫn mở nhanh giao diện ElegantOTA trực tiếp: http://<IP_ESP32>/update.
+  + Hướng dẫn tích hợp từng bước xuất file .bin từ Arduino IDE (Sketch -> Export Compiled Binary).
+- MLOps & Lịch sử AI YOLOv8 (Tab 3):
+  + Hiển thị danh sách tất cả các ảnh người dùng chụp nhận diện cá lưu trong CSDL.
+  + Ảnh xem trước dạng Thumbnail có thể bấm vào xem kích thước gốc.
+  + Hiển thị tên cá AI nhận diện, độ tự tin (%) và đánh giá an toàn sinh thái.
+  + Nút "Tải về Dataset" để Admin dễ dàng tải ảnh về phục vụ huấn luyện (Re-train) cải thiện mô hình YOLOv8 trong tương lai.
+  + Nút xóa bản ghi nhận diện.
+- Trạng thái Hệ thống & Dọn dẹp CSDL (Tab 4):
+  + Thống kê trực quan thời gian thực: Trạng thái Broker MQTT (EMQX), CSDL MySQL, Tổng số bản ghi cảm biến, Số lượng loài cá.
+  + Công cụ dọn dẹp CSDL thông minh: Cho phép dọn sạch các bản ghi cảm biến cũ hơn 7, 15, 30 hoặc 60 ngày chỉ với 1 click, giải phóng dung lượng Clever Cloud và tăng tốc độ truy vấn.
+- Yêu cầu Cập nhật Từ điển từ Khách (Tab 5):
+  + Hiển thị danh sách các loài cá người dùng tìm kiếm nhưng chưa có trong hệ thống.
+  + Nút "Thêm vào DB": Tự động mở Modal và tự sinh mã loài (VD: "Cá Ping Pong" -> "ca_ping_pong") giúp Admin bổ sung nhanh vào từ điển.
+  + Nút "Bỏ qua / Xóa yêu cầu" đã được liên kết với API DELETE thực tế.
+- Khả năng truy cập Mạng Nội bộ (LAN / Mobile Responsive):
+  + Backend Python tự động mount thư mục Static Files: Có thể mở cả trang Khách và trang Admin trực tiếp qua mạng WiFi nội bộ tại đường dẫn "http://<IP_MÁY_TÍNH>:8000/frontend/admin.html".
+  + Giao diện Admin hỗ trợ đầy đủ Responsive trên điện thoại di động với Header cố định và Menu ngăn kéo (Drawer).
+------------------------------------------------------------
